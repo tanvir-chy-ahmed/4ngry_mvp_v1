@@ -6,24 +6,30 @@
 #include "core/Global.h"
 #include "features/watch.h"
 #include "core/boot.h"
+#include "core/OTA.h"
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, OLED_SCL, OLED_SDA);
 
 void setup()
 {
     Serial.begin(115200);
-    BootUI::run();
-    randomSeed(analogRead(0) ^ (analogRead(1) << 8));
+    // BootUI::run();
+    // randomSeed(analogRead(0) ^ (analogRead(1) << 8));
 
-    // Start in IDLE
-    initExpression(IDLE, anim);
-    exprStartMs = millis();
-    scheduleIdleBlink(millis());
-    scheduleIdleLook(millis());
-    
+    // // Start in IDLE
+    // initExpression(IDLE, anim);
+    // exprStartMs = millis();
+    // scheduleIdleBlink(millis());
+    // scheduleIdleLook(millis());
 }
 
 void loop()
 {
+    for (int progress = 0; progress <= 100; progress++)
+    {
+        otaUpdateScreen(progress);
+
+        delay(50);
+    }
 
     unsigned long now = millis();
     handleTouch(now);

@@ -1,0 +1,52 @@
+name: 4ngry Firmware Build
+
+on:
+  push:
+    branches:
+      - "**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Read firmware version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(grep -oP '#define\s+FIRMWARE_VERSION\s+"\K[^"]+' include/version.h)
+
+          if [ -z "$VERSION" ]; then
+            echo "Firmware version not found!"
+            exit 1
+          fi
+
+          echo "Firmware version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build firmware
+        run: pio run
+
+      - name: Rename firmware
+        run: |
+          mkdir -p release
+
+          cp .pio/build/*/firmware.bin \
+             "release/4ngry-${{ steps.version.outputs.version }}.bin"
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 4ngry-${{ steps.version.outputs.version }}
+          path: release/4ngry-${{ steps.version.outputs.version }}.bin
