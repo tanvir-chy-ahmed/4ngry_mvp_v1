@@ -49,6 +49,7 @@ namespace BootUI
     void initUpdate()
     {
         checkfirmwareUpdate();
+        ESP.restart();
     }
 
     void initTime()

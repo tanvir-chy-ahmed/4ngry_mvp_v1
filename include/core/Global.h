@@ -4,4 +4,3 @@
 
 bool WiFiOn();
 void WiFiOff();
-// void initFun();
