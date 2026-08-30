@@ -5,8 +5,10 @@
 #include "version.h"
 #include "core/Global.h"
 
-const char *firmwareUrl = "https://github.com/tanvir-chy-ahmed/4ngry_mvp_v1/releases/download/v1.0.0/4ngry-1.0.0.bin";
-const char *versionUrl = "https://raw.githubusercontent.com/ittipu/esp32_firmware/refs/heads/main/version.txt";
+const char *firmwareUrl = "https://github.com/tanvir-chy-ahmed/4ngry_mvp_v1/releases/download/v" FIRMWARE_VERSION
+                          "/4ngry-" FIRMWARE_VERSION
+                          ".bin";
+const char *versionUrl = "https://github.com/tanvir-chy-ahmed/4ngry_mvp_v1/blob/main/version.txt";
 
 // --- Update Check Timer ---
 unsigned long lastUpdateCheck = 0;
