@@ -20,16 +20,15 @@ void setup()
     // exprStartMs = millis();
     // scheduleIdleBlink(millis());
     // scheduleIdleLook(millis());
+
+        otaUpdateScreen(40);
+
+ 
 }
 
 void loop()
 {
-    for (int progress = 0; progress <= 100; progress++)
-    {
-        otaUpdateScreen(progress);
-
-        delay(50);
-    }
+ 
 
     unsigned long now = millis();
     handleTouch(now);

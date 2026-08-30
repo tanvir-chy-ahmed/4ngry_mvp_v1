@@ -1,9 +1,12 @@
-name: 4ngry Firmware Build
+name: 4ngry Firmware Release
 
 on:
   push:
     branches:
-      - "**"
+      - main
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -28,7 +31,7 @@ jobs:
           VERSION=$(grep -oP '#define\s+FIRMWARE_VERSION\s+"\K[^"]+' include/version.h)
 
           if [ -z "$VERSION" ]; then
-            echo "Firmware version not found!"
+            echo "FIRMWARE_VERSION not found!"
             exit 1
           fi
 
@@ -38,15 +41,28 @@ jobs:
       - name: Build firmware
         run: pio run
 
-      - name: Rename firmware
+      - name: Prepare release
         run: |
           mkdir -p release
 
           cp .pio/build/*/firmware.bin \
              "release/4ngry-${{ steps.version.outputs.version }}.bin"
 
-      - name: Upload firmware artifact
-        uses: actions/upload-artifact@v4
+          echo "Created:"
+          ls -lh release/
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: 4ngry-${{ steps.version.outputs.version }}
-          path: release/4ngry-${{ steps.version.outputs.version }}.bin
+          tag_name: v${{ steps.version.outputs.version }}
+          name: 4ngry v${{ steps.version.outputs.version }}
+          body: |
+            4ngry Firmware v${{ steps.version.outputs.version }}
+
+            Automatic firmware build from commit:
+            ${{ github.sha }}
+          files: release/4ngry-${{ steps.version.outputs.version }}.bin
+          make_latest: true
+          overwrite_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
