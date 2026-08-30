@@ -1,5 +1,3 @@
-#pragma once
-
 #include <Arduino.h>
 #include <U8g2lib.h>
 
@@ -22,12 +20,12 @@ void otaUpdateScreen(int progress)
     // -------------------------
     // Header
     // -------------------------
-    u8g2.setFont(u8g2_font_6x10_tf);
-    u8g2.drawStr(4, 10, "4NGRY");
-    u8g2.drawStr(70, 10, "OTA UPDATE");
+    // u8g2.setFont(u8g2_font_6x10_tf);
+    // u8g2.drawStr(4, 10, "MTR");
+    // u8g2.drawStr(70, 10, "4ngry");
 
-    // Divider
-    u8g2.drawHLine(4, 14, 120);
+    // // Divider
+    // u8g2.drawHLine(4, 14, 120);
 
     // -------------------------
     // Animated spinner

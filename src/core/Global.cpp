@@ -12,16 +12,7 @@ void WiFiOff()
     WiFi.mode(WIFI_OFF);
 }
 
-// void WiFiOn()
-// {
-//     WiFi.begin(ssid, pass);
-//     while (WiFi.status() != WL_CONNECTED)
-//     {
-//         Serial.print(".");
-//     }
-//     Serial.println("\nWiFi Connected");
 
-// }
 bool WiFiOn()
 {
     Serial.println();

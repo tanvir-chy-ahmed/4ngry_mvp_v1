@@ -48,7 +48,7 @@ namespace BootUI
     void initTime()
     {
         getLocalTimeInfo();
-        }
+    }
 
     void initWeather()
     {

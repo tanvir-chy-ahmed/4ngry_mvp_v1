@@ -3,10 +3,10 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <U8g2lib.h>
+#include "update/ota_ui.h"
 
 #include "features/watch.h"
 #include "features/weather.h"
-
 #define FRAME_MS 33
 #define TOUCH_DEBOUNCE 250
 
@@ -39,6 +39,7 @@ enum Screen
     SCREEN_IDLE = 0,
     SCREEN_WEATHER,
     SCREEN_CLOCK,
+    SCREEN_UPDATE,
     // SCREEN_MENU,
     SCREEN_COUNT
 };
@@ -1476,14 +1477,12 @@ static void renderScreen(Screen screen)
     case SCREEN_CLOCK:
         watchUI();
         break;
+        
+    case SCREEN_UPDATE:
+            otaUpdateScreen(40);
+        break;
 
-    // case SCREEN_MENU:
-    //     u8g2.setFont(u8g2_font_6x12_tf);
-    //     u8g2.drawStr(10, 15, "MENU");
-    //     u8g2.drawStr(10, 32, "> Weather");
-    //     u8g2.drawStr(10, 46, "  Clock");
 
-    //     break;
 
     default:
         break;
