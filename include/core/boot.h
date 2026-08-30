@@ -6,6 +6,7 @@
 #include "core/Global.h"
 #include "features/watch.h"
 #include "features/weather.h"
+#include "update/ota_update.h"
 
 extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
 
@@ -44,6 +45,11 @@ namespace BootUI
     {
         WiFiOn();
     }
+    
+    void initUpdate()
+    {
+        checkfirmwareUpdate();
+    }
 
     void initTime()
     {
@@ -66,6 +72,7 @@ namespace BootUI
             {"Display", initDisplay},
 
             {"WIFI", initWiFi},
+            {"Update", initUpdate},
 
             {"TIME", initTime},
             {"WEATHER", initWeather},

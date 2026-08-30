@@ -1,10 +1,17 @@
 #pragma once
+
 #include <Arduino.h>
-#include <WiFi.h>
-#include <HTTPClient.h>
+#include <WiFiClient.h>
+
+String fetchLatestVersion();
 
 void checkfirmwareUpdate();
-String fetchVersion();
 
-void downloadAndApplyFirmware();
-bool startOTAUpdate(WiFiClient *client, int contentLength);
+void downloadAndApplyFirmware(
+    const String &version
+);
+
+bool startOTAUpdate(
+    WiFiClient *client,
+    int contentLength
+);
