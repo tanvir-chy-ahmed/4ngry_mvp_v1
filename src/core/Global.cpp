@@ -2,8 +2,7 @@
 #include <Arduino.h>
 #include <features/watch.h>
 #include <features/weather.h>
-const char *ssid = "Tanvir Ahmed Chy";
-const char *pass = "12345678HH";
+#include "util/secret.h"
 
 void WiFiOff()
 {
@@ -45,40 +44,26 @@ bool WiFiOn()
 
     return false;
 }
-// void initFun()
+
+
+
+// void WiFiOn()
 // {
-//     Serial.println();
-//     Serial.println("========== initFun() CALLED ==========");
-//     if (WiFiOn())
-//     { 
-       
-//         getLocalTimeInfo();
-//         delay(30000);
-//         getWeatherInfo();
+//     WiFi.mode(WIFI_STA);
+//     WiFi.begin(ssid, pass);
+
+//     unsigned long start = millis();
+
+//     while (WiFi.status() != WL_CONNECTED &&
+//            millis() - start < 15000)
+//     {
+//         delay(100);
+//         Serial.print(".");
 //     }
+
+//     if (WiFi.status() == WL_CONNECTED)
+//         Serial.println("\nWiFi Connected");
+//     else
+//         Serial.println("\nWiFi connection failed");
 // }
 
-/*
-
-
-void WiFiOn()
-{
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, pass);
-
-    unsigned long start = millis();
-
-    while (WiFi.status() != WL_CONNECTED &&
-           millis() - start < 15000)
-    {
-        delay(100);
-        Serial.print(".");
-    }
-
-    if (WiFi.status() == WL_CONNECTED)
-        Serial.println("\nWiFi Connected");
-    else
-        Serial.println("\nWiFi connection failed");
-}
-
-*/

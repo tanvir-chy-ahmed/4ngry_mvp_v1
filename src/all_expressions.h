@@ -39,7 +39,6 @@ enum Screen
     SCREEN_IDLE = 0,
     SCREEN_WEATHER,
     SCREEN_CLOCK,
-    SCREEN_UPDATE,
     // SCREEN_MENU,
     SCREEN_COUNT
 };
@@ -1478,9 +1477,9 @@ static void renderScreen(Screen screen)
         watchUI();
         break;
         
-    case SCREEN_UPDATE:
-            otaUpdateScreen(40);
-        break;
+    // case SCREEN_UPDATE:
+    //         otaUpdateScreen(40);
+    //     break;
 
 
 

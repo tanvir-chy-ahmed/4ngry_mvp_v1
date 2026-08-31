@@ -7,6 +7,7 @@
 #include "version.h"
 #include "core/Global.h"
 #include "update/ota_update.h"
+#include "prefs/version_controller.h"
 
 // ============================================================
 // GitHub Configuration
@@ -27,7 +28,6 @@ unsigned long lastUpdateCheck = 0;
 const unsigned long updateCheckInterval =
     60UL * 60UL * 1000UL; // 1 hour
 
-
 // ============================================================
 // Fetch Latest GitHub Release Version
 // ============================================================
@@ -41,22 +41,19 @@ String fetchLatestVersion()
     // GitHub API User-Agent
     http.addHeader(
         "User-Agent",
-        "4ngry-ESP32"
-    );
+        "4ngry-ESP32");
 
     int httpCode = http.GET();
 
     Serial.printf(
         "GitHub API HTTP code: %d\n",
-        httpCode
-    );
+        httpCode);
 
     if (httpCode != HTTP_CODE_OK)
     {
         Serial.printf(
             "Failed to fetch latest release. HTTP code: %d\n",
-            httpCode
-        );
+            httpCode);
 
         http.end();
 
@@ -80,8 +77,7 @@ String fetchLatestVersion()
     {
         Serial.printf(
             "JSON parsing failed: %s\n",
-            error.c_str()
-        );
+            error.c_str());
 
         return "";
     }
@@ -92,8 +88,7 @@ String fetchLatestVersion()
     if (tagName == "")
     {
         Serial.println(
-            "GitHub tag_name not found."
-        );
+            "GitHub tag_name not found.");
 
         return "";
     }
@@ -112,12 +107,10 @@ String fetchLatestVersion()
     }
 
     Serial.println(
-        "Latest GitHub version: " + tagName
-    );
+        "Latest GitHub version: " + tagName);
 
     return tagName;
 }
-
 
 // ============================================================
 // Check Firmware Update
@@ -128,8 +121,7 @@ void checkfirmwareUpdate()
     if (!WiFiOn())
     {
         Serial.println(
-            "OTA check skipped: WiFi not connected."
-        );
+            "OTA check skipped: WiFi not connected.");
 
         return;
     }
@@ -149,8 +141,7 @@ void checkfirmwareUpdate()
     if (latestVersion == "")
     {
         Serial.println(
-            "Failed to fetch latest version."
-        );
+            "Failed to fetch latest version.");
 
         return;
     }
@@ -164,13 +155,11 @@ void checkfirmwareUpdate()
 
     Serial.println(
         "Current Firmware Version: " +
-        currentVersion
-    );
+        currentVersion);
 
     Serial.println(
         "Latest Firmware Version: " +
-        latestVersion
-    );
+        latestVersion);
 
     // --------------------------------------------------------
     // Compare
@@ -179,33 +168,27 @@ void checkfirmwareUpdate()
     if (latestVersion != currentVersion)
     {
         Serial.println(
-            "New firmware available!"
-        );
+            "New firmware available!");
 
         Serial.println(
-            "Starting OTA update..."
-        );
+            "Starting OTA update...");
 
         downloadAndApplyFirmware(
-            latestVersion
-        );
+            latestVersion);
     }
     else
     {
         Serial.println(
-            "Device is up to date."
-        );
+            "Device is up to date.");
     }
 }
-
 
 // ============================================================
 // Download Firmware
 // ============================================================
 
 void downloadAndApplyFirmware(
-    const String &version
-)
+    const String &version)
 {
     // --------------------------------------------------------
     // Build firmware URL
@@ -238,8 +221,7 @@ void downloadAndApplyFirmware(
     // GitHub Release redirects to its
     // actual asset server.
     http.setFollowRedirects(
-        HTTPC_STRICT_FOLLOW_REDIRECTS
-    );
+        HTTPC_STRICT_FOLLOW_REDIRECTS);
 
     // SAME METHOD AS YOUR WORKING CODE
     http.begin(firmwareUrl);
@@ -248,8 +230,7 @@ void downloadAndApplyFirmware(
 
     Serial.printf(
         "HTTP GET code: %d\n",
-        httpCode
-    );
+        httpCode);
 
     // --------------------------------------------------------
     // Download successful
@@ -262,8 +243,7 @@ void downloadAndApplyFirmware(
 
         Serial.printf(
             "Firmware size: %d bytes\n",
-            contentLength
-        );
+            contentLength);
 
         if (contentLength > 0)
         {
@@ -274,13 +254,16 @@ void downloadAndApplyFirmware(
                     stream,
                     contentLength))
             {
-                Serial.println(
-                    "OTA update successful!"
-                );
+                Serial.println("OTA update successful!");
+
+                // Save the version that was just installed
+                VersionController::saveVersion(version);
 
                 Serial.println(
-                    "Restarting..."
-                );
+                    "Installed firmware version: " +
+                    VersionController::getVersion());
+
+                Serial.println("Restarting...");
 
                 http.end();
 
@@ -291,28 +274,24 @@ void downloadAndApplyFirmware(
             else
             {
                 Serial.println(
-                    "OTA update failed."
-                );
+                    "OTA update failed.");
             }
         }
         else
         {
             Serial.println(
-                "Invalid firmware size."
-            );
+                "Invalid firmware size.");
         }
     }
     else
     {
         Serial.printf(
             "Failed to fetch firmware. HTTP code: %d\n",
-            httpCode
-        );
+            httpCode);
     }
 
     http.end();
 }
-
 
 // ============================================================
 // OTA Flash Write
@@ -320,12 +299,10 @@ void downloadAndApplyFirmware(
 
 bool startOTAUpdate(
     WiFiClient *client,
-    int contentLength
-)
+    int contentLength)
 {
     Serial.println(
-        "Initializing update..."
-    );
+        "Initializing update...");
 
     // --------------------------------------------------------
     // Start OTA
@@ -335,15 +312,13 @@ bool startOTAUpdate(
     {
         Serial.printf(
             "Update begin failed: %s\n",
-            Update.errorString()
-        );
+            Update.errorString());
 
         return false;
     }
 
     Serial.println(
-        "Writing firmware..."
-    );
+        "Writing firmware...");
 
     size_t written = 0;
 
@@ -377,8 +352,7 @@ bool startOTAUpdate(
             size_t len =
                 client->read(
                     buffer,
-                    sizeof(buffer)
-                );
+                    sizeof(buffer));
 
             if (len > 0)
             {
@@ -390,20 +364,17 @@ bool startOTAUpdate(
                 size_t writtenNow =
                     Update.write(
                         buffer,
-                        len
-                    );
+                        len);
 
                 if (writtenNow != len)
                 {
                     Serial.println(
-                        "Flash write failed."
-                    );
+                        "Flash write failed.");
 
                     Serial.printf(
                         "Expected: %d, Written: %d\n",
                         len,
-                        writtenNow
-                    );
+                        writtenNow);
 
                     Update.abort();
 
@@ -424,8 +395,7 @@ bool startOTAUpdate(
                 {
                     Serial.printf(
                         "Writing Progress: %d%%\n",
-                        progress
-                    );
+                        progress);
 
                     lastProgress =
                         progress;
@@ -441,8 +411,7 @@ bool startOTAUpdate(
             timeoutDuration)
         {
             Serial.println(
-                "Timeout: No data received."
-            );
+                "Timeout: No data received.");
 
             Update.abort();
 
@@ -454,8 +423,7 @@ bool startOTAUpdate(
 
     Serial.println();
     Serial.println(
-        "Writing complete."
-    );
+        "Writing complete.");
 
     // --------------------------------------------------------
     // Verify size
@@ -468,8 +436,7 @@ bool startOTAUpdate(
             "Write incomplete. "
             "Expected %d but got %d bytes\n",
             contentLength,
-            written
-        );
+            written);
 
         Update.abort();
 
@@ -484,8 +451,7 @@ bool startOTAUpdate(
     {
         Serial.printf(
             "Update end failed: %s\n",
-            Update.errorString()
-        );
+            Update.errorString());
 
         return false;
     }
@@ -497,15 +463,13 @@ bool startOTAUpdate(
     if (!Update.isFinished())
     {
         Serial.println(
-            "Update did not finish correctly."
-        );
+            "Update did not finish correctly.");
 
         return false;
     }
 
     Serial.println(
-        "Update successfully completed."
-    );
+        "Update successfully completed.");
 
     return true;
 }
