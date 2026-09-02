@@ -7,8 +7,7 @@
 #include "features/watch.h"
 #include "core/boot.h"
 #include "version.h"
-
-
+#include "features/watch.h"
 
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, OLED_SCL, OLED_SDA);
 
@@ -16,8 +15,6 @@ void setup()
 {
     Serial.begin(115200);
 
-    
-    
     BootUI::run();
     randomSeed(analogRead(0) ^ (analogRead(1) << 8));
 
@@ -31,10 +28,10 @@ void setup()
 
 void loop()
 {
-
+    
     unsigned long now = millis();
     handleTouch(now);
-
+    updateLocalTime();
     // ─────────────────────────────────────────
     // Frame rate gate
     // ─────────────────────────────────────────

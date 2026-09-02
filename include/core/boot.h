@@ -45,15 +45,10 @@ namespace BootUI
     {
         WiFiOn();
     }
-    
+
     void initUpdate()
     {
         checkfirmwareUpdate();
-    }
-
-    void initTime()
-    {
-        getLocalTimeInfo();
     }
 
     void initWeather()
@@ -72,9 +67,8 @@ namespace BootUI
             {"Display", initDisplay},
 
             {"WIFI", initWiFi},
-            {"Update", initUpdate},
-
             {"TIME", initTime},
+            {"Update", initUpdate},
             {"WEATHER", initWeather},
     };
 

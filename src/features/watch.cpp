@@ -5,8 +5,9 @@
 #include "time.h"
 #include "features/watch.h"
 #include "features/weather.h"
-const long gmtOffset_sec = 6 * 3600; // utc 6
-const int daylightOffset_sec = 0; // BD dont save any offset time so 0
+
+const long gmtOffset_sec = 6 * 3600;
+const int daylightOffset_sec = 0;
 
 int hour = 0;
 int minute = 0;
@@ -16,22 +17,78 @@ int day = 0;
 int month = 0;
 int year = 0;
 int weekday = 0;
+
 struct tm timeinfo;
-const char *weekdays[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
-const char *monthname[] = {
+
+const char *weekdays[] =
+{
+    "SUN", "MON", "TUE", "WED",
+    "THU", "FRI", "SAT"
+};
+
+const char *monthname[] =
+{
     "JAN", "FEB", "MAR", "APR",
     "MAY", "JUN", "JUL", "AUG",
-    "SEP", "OCT", "NOV", "DEC"};
+    "SEP", "OCT", "NOV", "DEC"
+};
 
-void getLocalTimeInfo()
+bool timeSynced = false;
+unsigned long lastClockUpdate = 0;
+const unsigned long CLOCK_UPDATE_INTERVAL = 250;
+
+// ============================================================
+// INITIALIZE NTP
+// ============================================================
+
+
+void initTime()
 {
-    configTime(gmtOffset_sec, daylightOffset_sec, "pool.ntp.org", "time.nist.gov");
-    
-    if (!getLocalTime(&timeinfo))
+    configTime(
+        gmtOffset_sec,
+        daylightOffset_sec,
+        "pool.ntp.org",
+        "time.nist.gov"
+    );
+
+    Serial.println("NTP configured");
+
+    // Try several times because WiFi may be connected
+    // before Internet/DNS is actually ready.
+    for (int i = 0; i < 10; i++)
     {
-        Serial.println("Failed to Obtain Time");
+        if (getLocalTime(&timeinfo, 1000))
+        {
+            timeSynced = true;
+
+            Serial.println("Time synchronized successfully");
+            return;
+        }
+
+        Serial.println("Waiting for NTP...");
+        delay(500);
+    }
+
+    Serial.println("Failed to synchronize time");
+}
+// ============================================================
+// UPDATE CLOCK VARIABLES
+// ============================================================
+
+void updateLocalTime()
+{
+    if (millis() - lastClockUpdate < CLOCK_UPDATE_INTERVAL)
+        return;
+
+    lastClockUpdate = millis();
+
+    if (!getLocalTime(&timeinfo, 10))
+    {
+        timeSynced = false;
         return;
     }
+
+    timeSynced = true;
 
     hour = timeinfo.tm_hour;
     minute = timeinfo.tm_min;
@@ -41,9 +98,6 @@ void getLocalTimeInfo()
     month = timeinfo.tm_mon + 1;
     year = timeinfo.tm_year + 1900;
     weekday = timeinfo.tm_wday;
-   Serial.println("Time synchronized successfully");
-
-    // Bangladesh = UTC+6
 }
 
 extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;

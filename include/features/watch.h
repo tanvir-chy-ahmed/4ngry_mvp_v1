@@ -1,4 +1,5 @@
 #pragma once
 
 void watchUI();
-void getLocalTimeInfo();
+void updateLocalTime();
+void initTime();
