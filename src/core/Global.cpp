@@ -22,7 +22,6 @@ bool WiFiOn()
     Serial.print("Connecting to WiFi");
 
     unsigned long startTime = millis();
-    const int test = 10;
     while (WiFi.status() != WL_CONNECTED &&
            millis() - startTime < 15000)
     {
