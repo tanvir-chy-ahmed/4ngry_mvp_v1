@@ -11,7 +11,6 @@ void WiFiOff()
     WiFi.mode(WIFI_OFF);
 }
 
-
 bool WiFiOn()
 {
     Serial.println();
@@ -23,7 +22,7 @@ bool WiFiOn()
     Serial.print("Connecting to WiFi");
 
     unsigned long startTime = millis();
-
+    const int test = 10;
     while (WiFi.status() != WL_CONNECTED &&
            millis() - startTime < 15000)
     {
@@ -45,8 +44,6 @@ bool WiFiOn()
     return false;
 }
 
-
-
 // void WiFiOn()
 // {
 //     WiFi.mode(WIFI_STA);
@@ -66,4 +63,3 @@ bool WiFiOn()
 //     else
 //         Serial.println("\nWiFi connection failed");
 // }
-
