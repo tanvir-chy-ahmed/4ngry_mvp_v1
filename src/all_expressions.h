@@ -37,9 +37,8 @@ enum Expression
 enum Screen
 {
     SCREEN_IDLE = 0,
-    SCREEN_WEATHER,
     SCREEN_CLOCK,
-    // SCREEN_MENU,
+    SCREEN_WEATHER,
     SCREEN_COUNT
 };
 
@@ -1469,18 +1468,13 @@ static void renderScreen(Screen screen)
         renderFace(anim, millis());
         break;
 
-    case SCREEN_WEATHER:
-        weatherUI();
-        break;
-
     case SCREEN_CLOCK:
         watchUI();
         break;
-        
-    // case SCREEN_UPDATE:
-    //         otaUpdateScreen(40);
-    //     break;
 
+    case SCREEN_WEATHER:
+        weatherUI();
+        break;
 
 
     default:
