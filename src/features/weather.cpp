@@ -2,20 +2,20 @@
 #include "features/watch.h"
 #include <U8g2lib.h>
 #include <WiFi.h>
-#include <Arduino_JSON.h>
 #include <HTTPClient.h>
 #include <string.h>
-#include "core/Global.h"
+#include "core/global.h"
+#include <Arduino_JSON.h>
 
-extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
+extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 
 // https://api.openweathermap.org/data/2.5/weather?id=1185099&appid=554eb7387cc38ab998746cb3522e1cd3&units=metric
 
 
 String openwetherapikey = "554eb7387cc38ab998746cb3522e1cd3";
 String countryCode = "BD";
-String latitude = "24.8990";
-String longitude = "91.8720";
+String latitude = "24.857";
+String longitude = "92.014";
 String units = "metric";
 String city = "Sylhet";
 String language = "en";

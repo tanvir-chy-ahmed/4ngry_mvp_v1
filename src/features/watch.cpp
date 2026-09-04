@@ -42,7 +42,7 @@ const unsigned long CLOCK_UPDATE_INTERVAL = 250;
 // ============================================================
 
 
-void initTime()
+void initLocalTime()
 {
     configTime(
         gmtOffset_sec,
@@ -100,7 +100,7 @@ void updateLocalTime()
     weekday = timeinfo.tm_wday;
 }
 
-extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
+extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 
 static uint8_t watchFrame = 0;
 
