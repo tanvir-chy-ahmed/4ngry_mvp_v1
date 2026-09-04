@@ -2,4 +2,4 @@
 
 void watchUI();
 void updateLocalTime();
-void initTime();
+void initLocalTime();

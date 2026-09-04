@@ -3,19 +3,26 @@
 #include "all_expressions.h"
 #include <WiFi.h>
 #include "time.h"
-#include "core/Global.h"
+#include "core/global.h"
 #include "features/watch.h"
 #include "core/boot.h"
 #include "version.h"
 #include "features/watch.h"
 
-U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, OLED_SCL, OLED_SDA);
+// U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, OLED_SCL, OLED_SDA);
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(
+    U8G2_R0,
+    U8X8_PIN_NONE,
+    OLED_SCL,
+    OLED_SDA
+);
 
 void setup()
 {
     Serial.begin(115200);
+    BootUI::initDriver();
+    BootUI::initDisplay();
 
-    BootUI::run();
     randomSeed(analogRead(0) ^ (analogRead(1) << 8));
 
     // Start in IDLE
@@ -24,14 +31,27 @@ void setup()
     scheduleIdleBlink(millis());
     scheduleIdleLook(millis());
     Serial.println("Current Firmware Version: " + String(FIRMWARE_VERSION));
+
+    BootUI::initWiFi();
+    BootUI::initWeather();
+    BootUI::initTime();
+
+    // Global::WiFiOff();
 }
 
 void loop()
 {
-    
+
     unsigned long now = millis();
     handleTouch(now);
-    updateLocalTime();
+    // Time update at controlled interval
+    static uint32_t lastTimeUpdate = 0;
+
+    if (now - lastTimeUpdate >= 1000)
+    {
+        lastTimeUpdate = now;
+        updateLocalTime();
+    }
     // ─────────────────────────────────────────
     // Frame rate gate
     // ─────────────────────────────────────────

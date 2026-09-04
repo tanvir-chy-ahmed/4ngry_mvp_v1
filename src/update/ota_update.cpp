@@ -3,9 +3,8 @@
 #include <HTTPClient.h>
 #include <Update.h>
 #include <ArduinoJson.h>
-
 #include "version.h"
-#include "core/Global.h"
+#include "core/global.h"
 #include "update/ota_update.h"
 #include "prefs/version_controller.h"
 
@@ -118,11 +117,9 @@ String fetchLatestVersion()
 
 void checkfirmwareUpdate()
 {
-    if (!WiFiOn())
+    if (!Global::WiFiOn())
     {
-        Serial.println(
-            "OTA check skipped: WiFi not connected.");
-
+        Serial.println("OTA check skipped: WiFi not connected.");
         return;
     }
 

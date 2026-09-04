@@ -1,6 +1,7 @@
 #pragma once
 
-
-
-bool WiFiOn();
-void WiFiOff();
+namespace Global
+{
+    void WiFiOff();
+    bool WiFiOn();
+}

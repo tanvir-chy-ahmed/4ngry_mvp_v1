@@ -3,12 +3,12 @@
 
 #include <Arduino.h>
 #include <U8g2lib.h>
-#include "core/Global.h"
+#include "core/global.h"
 #include "features/watch.h"
 #include "features/weather.h"
 #include "update/ota_update.h"
 
-extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
+extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 
 namespace BootUI
 {
@@ -25,10 +25,6 @@ namespace BootUI
         InitFunction function;
     };
 
-    // ==================================================
-    // Add your initialization functions here
-    // ==================================================
-
     void initDisplay()
     {
         u8g2.begin();
@@ -38,28 +34,29 @@ namespace BootUI
     void initDriver()
     {
         pinMode(TOUCH_PIN, INPUT);
+
         Wire.begin(OLED_SDA, OLED_SCL); // i2c initialize
     }
 
     void initWiFi()
     {
-        WiFiOn();
+        Global::WiFiOn();
     }
 
-    void initUpdate()
-    {
-        checkfirmwareUpdate();
-    }
+    // void initUpdate()
+    // {
+    //     checkfirmwareUpdate();
+    // }
 
     void initWeather()
     {
         getWeatherInfo();
     }
 
-    // ==================================================
-    // INIT LIST
-    // Just add your functions here
-    // ==================================================
+    void initTime()
+    {
+        initLocalTime();
+    }
 
     InitTask tasks[] =
         {
@@ -68,7 +65,7 @@ namespace BootUI
 
             {"WIFI", initWiFi},
             {"TIME", initTime},
-            {"Update", initUpdate},
+            // {"Update", initUpdate},
             {"WEATHER", initWeather},
     };
 
