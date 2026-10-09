@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
 
-extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
+extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
 
 void otaUpdateScreen(int progress)
 {
@@ -76,8 +76,7 @@ void otaUpdateScreen(int progress)
     u8g2.drawStr(
         64 - textWidth / 2,
         56,
-        percent
-    );
+        percent);
 
     u8g2.sendBuffer();
 }
