@@ -1,3 +1,8 @@
+ADD FEATURE:
+       - SLIDING TIME/WEATHER/FACE FEATURE
+       - IF NEW RUN SHOW WIFI CREDETIAL WEBPAGE
+       - 
+
 # ESP32 OLED + Touch Project
 
 A simple ESP32-based project using a **128×64 I2C OLED display** and a **TTP223 touch sensor**.

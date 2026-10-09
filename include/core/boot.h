@@ -8,10 +8,125 @@
 #include "features/weather.h"
 #include "update/ota_update.h"
 
-extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
+extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
 
 namespace BootUI
 {
+
+    void playBootAnimation()
+    {
+        const int cx = 64;
+        const int cy = 32;
+
+        // Draw the complete MTR logo.
+
+        auto drawMTRLogo = []()
+        {
+            u8g2.setDrawColor(1);
+
+            // Main MTR logo
+            u8g2.setFont(u8g2_font_helvB24_tf);
+
+            const char *logo = "MTR";
+            int logoWidth = u8g2.getStrWidth(logo);
+            int logoX = (128 - logoWidth) / 2;
+
+            u8g2.drawStr(logoX, 34, logo);
+
+            // Short underline
+            int lineWidth = logoWidth + 6;
+            u8g2.drawHLine((128 - lineWidth) / 2, 39, lineWidth);
+
+            // Small subtitle
+            u8g2.setFont(u8g2_font_5x8_tf);
+            const char *subtitle = "MR THORIN RAPTOR";
+            int subWidth = u8g2.getStrWidth(subtitle);
+            u8g2.drawStr((128 - subWidth) / 2, 48, subtitle);
+
+            // Small signature: 4ngry
+            u8g2.setFont(u8g2_font_6x10_tf);
+            const char *signature = "4ngry";
+            int sigWidth = u8g2.getStrWidth(signature);
+            u8g2.drawStr((128 - sigWidth) / 2, 61, signature);
+        };
+
+        // ---------------------------------
+        // 1. Expanding circle wipe
+        // ---------------------------------
+        for (int r = 0; r <= 80; r += 4)
+        {
+            u8g2.clearBuffer();
+            u8g2.setDrawColor(1);
+            u8g2.drawDisc(cx, cy, r);
+            u8g2.sendBuffer();
+            delay(10);
+        }
+
+        // ---------------------------------
+        // 2. Inverse circle wipe
+        // ---------------------------------
+        for (int r = 0; r <= 80; r += 4)
+        {
+            u8g2.clearBuffer();
+
+            u8g2.setDrawColor(1);
+            u8g2.drawDisc(cx, cy, 80);
+
+            u8g2.setDrawColor(0);
+            u8g2.drawDisc(cx, cy, r);
+
+            u8g2.sendBuffer();
+            delay(10);
+        }
+
+        // ---------------------------------
+        // 3. Animated horizontal logo reveal
+        // ---------------------------------
+        for (int width = 0; width <= 64; width += 8)
+        {
+            u8g2.clearBuffer();
+
+            // Moving scan lines
+            u8g2.setDrawColor(1);
+            u8g2.drawHLine(0, 15, width);
+            u8g2.drawHLine(128 - width, 48, width);
+
+            // Reveal logo after the first frames
+            if (width >= 24)
+            {
+                drawMTRLogo();
+            }
+
+            u8g2.sendBuffer();
+            delay(35);
+        }
+
+        // ---------------------------------
+        // 4. Brief inverted flash
+        // ---------------------------------
+        u8g2.clearBuffer();
+        u8g2.setDrawColor(1);
+        u8g2.drawBox(0, 0, 128, 64);
+
+        u8g2.setDrawColor(0);
+        u8g2.setFont(u8g2_font_helvB24_tf);
+
+        const char *logo = "MTR";
+        int logoWidth = u8g2.getStrWidth(logo);
+        u8g2.drawStr((128 - logoWidth) / 2, 36, logo);
+
+        u8g2.sendBuffer();
+        delay(100);
+
+        // ---------------------------------
+        // 5. Final clean logo
+        // ---------------------------------
+        u8g2.clearBuffer();
+        drawMTRLogo();
+        u8g2.sendBuffer();
+
+        delay(2200);
+    }
 
     // ==================================================
     // Init Function Type
@@ -50,7 +165,25 @@ namespace BootUI
 
     void initWeather()
     {
-        getWeatherInfo();
+        Serial.println("Waiting for WiFi before fetching weather...");
+
+        const unsigned long startTime = millis();
+        const unsigned long wifiTimeout = 15000;
+
+        while (WiFi.status() != WL_CONNECTED &&
+               millis() - startTime < wifiTimeout)
+        {
+            Global::updateWiFi();
+            delay(100);
+        }
+
+        if (WiFi.status() != WL_CONNECTED)
+        {
+            Serial.println("Weather skipped: WiFi connection timeout");
+            return;
+        }
+
+        fetchWeatherWithRetry();
     }
 
     void initTime()
