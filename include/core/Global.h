@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Arduino.h>
 
 namespace Global
 {
@@ -21,4 +22,9 @@ namespace Global
 
     WiFiState getWiFiState();
     bool isWiFiConnected();
+    int getWiFiRSSI();
+    String getSavedSSID();
+    uint32_t getSecondsUntilRetry();
+    void triggerImmediateReconnect();
+    void resetWiFiCredentials();
 }
