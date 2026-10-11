@@ -105,7 +105,7 @@ namespace Global
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DeskROBO Wi-Fi Setup</title>
+<title>4ngryROBO Wi-Fi Setup</title>
 <style>
 body {
     margin: 0;
@@ -146,8 +146,8 @@ button {
 </head>
 <body>
 <main>
-<h2>DeskROBO Setup</h2>
-<p>Enter your home Wi-Fi credentials. DeskROBO will save them and connect automatically next time.</p>
+<h2>4ngryROBO Setup</h2>
+<p>Enter your home Wi-Fi credentials. 4ngryROBO will save them and connect automatically next time.</p>
 <form action="/save" method="POST">
 <label>Wi-Fi network name</label>
 <input name="ssid" maxlength="32" required placeholder="Your Wi-Fi SSID">
@@ -169,12 +169,12 @@ button {
 
     void startSetupPortal()
     {
-        Serial.println("Starting DeskROBO setup portal...");
+        Serial.println("Starting 4ngryROBO setup portal...");
 
         WiFi.disconnect(false, false);
         WiFi.mode(WIFI_AP_STA);
 
-        bool apStarted = WiFi.softAP("DeskROBO", "12345678");
+        bool apStarted = WiFi.softAP("4ngryROBO", "12345678");
 
         if (!apStarted)
         {
@@ -211,7 +211,7 @@ button {
                 return;
             }
 
-            preferences.begin("deskrobo", false);
+            preferences.begin("4ngryROBO", false);
             preferences.putString("ssid", ssid);
             preferences.putString("password", password);
             preferences.end();
@@ -225,8 +225,8 @@ button {
                 "text/html",
                 "<html><body style='font-family:Arial;padding:24px'>"
                 "<h2>Credentials saved</h2>"
-                "<p>DeskROBO is now connecting to your Wi-Fi. "
-                "You can disconnect from the DeskROBO network.</p>"
+                "<p>4ngryROBO is now connecting to your Wi-Fi. "
+                "You can disconnect from the 4ngryROBO network.</p>"
                 "</body></html>"
             );
 
@@ -248,7 +248,7 @@ button {
 
     static bool loadCredentials()
     {
-        if (!preferences.begin("deskrobo", true))
+        if (!preferences.begin("4ngryROBO", true))
             return false;
 
         savedSSID = preferences.getString("ssid", "");
@@ -291,7 +291,7 @@ button {
 
     bool WiFiOn()
     {
-        Serial.println("Initializing DeskROBO Wi-Fi...");
+        Serial.println("Initializing 4ngryROBO Wi-Fi...");
 
         WiFi.persistent(false);
         WiFi.setAutoReconnect(true);

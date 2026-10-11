@@ -24,35 +24,35 @@ inline void drawWiFiStatusUI()
 
     switch (state)
     {
-        case Global::WIFI_NO_CREDENTIALS:
-        case Global::WIFI_SETUP_PORTAL:
-            u8g2.drawStr(0, 12, "DeskROBO Setup");
-            u8g2.drawHLine(0, 17, 128);
-            u8g2.drawStr(0, 31, "Connect to WiFi:");
-            u8g2.drawStr(0, 43, "DeskROBO");
-            u8g2.drawStr(0, 55, "Pass: 12345678");
-            u8g2.drawStr(0, 64, "Open 192.168.4.1");
-            break;
+    case Global::WIFI_NO_CREDENTIALS:
+    case Global::WIFI_SETUP_PORTAL:
+        u8g2.drawStr(0, 12, "4ngryROBO Setup");
+        u8g2.drawHLine(0, 17, 128);
+        u8g2.drawStr(0, 31, "Connect to WiFi:");
+        u8g2.drawStr(0, 43, "4ngryROBO");
+        u8g2.drawStr(0, 55, "Pass: 12345678");
+        u8g2.drawStr(0, 64, "Open 192.168.4.1");
+        break;
 
-        case Global::WIFI_CONNECTING:
-            u8g2.drawStr(0, 12, "DeskROBO");
-            u8g2.drawHLine(0, 17, 128);
-            u8g2.drawStr(0, 34, "Connecting to WiFi");
-            u8g2.drawStr(0, 49, "Please wait...");
-            break;
+    case Global::WIFI_CONNECTING:
+        u8g2.drawStr(0, 12, "4ngryROBO");
+        u8g2.drawHLine(0, 17, 128);
+        u8g2.drawStr(0, 34, "Connecting to WiFi");
+        u8g2.drawStr(0, 49, "Please wait...");
+        break;
 
-        case Global::WIFI_UNAVAILABLE:
-            u8g2.drawStr(0, 12, "DeskROBO");
-            u8g2.drawHLine(0, 17, 128);
-            u8g2.drawStr(0, 34, "WiFi unavailable");
-            u8g2.drawStr(0, 48, "Retrying in background");
-            break;
+    case Global::WIFI_UNAVAILABLE:
+        u8g2.drawStr(0, 12, "4ngryROBO");
+        u8g2.drawHLine(0, 17, 128);
+        u8g2.drawStr(0, 34, "WiFi unavailable");
+        u8g2.drawStr(0, 48, "Retrying in background");
+        break;
 
-        case Global::WIFI_CONNECTED:
-            u8g2.drawStr(0, 12, "WiFi Connected");
-            u8g2.drawHLine(0, 17, 128);
-            u8g2.drawStr(0, 34, "Network ready");
-            break;
+    case Global::WIFI_CONNECTED:
+        u8g2.drawStr(0, 12, "WiFi Connected");
+        u8g2.drawHLine(0, 17, 128);
+        u8g2.drawStr(0, 34, "Network ready");
+        break;
     }
 
     u8g2.sendBuffer();
@@ -78,155 +78,10 @@ void setup()
     BootUI::initWeather();
 }
 
-// void loop()
-// {
-
-//     unsigned long now = millis();
-//     handleTouch(now);
-//     Global::updateWiFi();
-//     // Time update at controlled interval
-//     static uint32_t lastTimeUpdate = 0;
-
-//     if (now - lastTimeUpdate >= 1000)
-//     {
-//         lastTimeUpdate = now;
-//         updateLocalTime();
-//     }
-//     // ─────────────────────────────────────────
-//     // Frame rate gate
-//     // ─────────────────────────────────────────
-//     if (now - lastFrameMs < FRAME_MS)
-//         return;
-
-//     lastFrameMs = now;
-
-//     float ms = (float)now;
-
-//     if (transitioning)
-//     {
-//         transitionT += 0.08f;
-
-//         if (transitionT >= 1.0f)
-//         {
-//             // Transition finished
-//             transitioning = false;
-
-//             currentExpr = nextExpr;
-//             exprStartMs = now;
-
-//             initExpression(currentExpr, anim);
-
-//             // Reset idle-specific scheduling
-//             if (currentExpr == IDLE)
-//             {
-//                 scheduleIdleBlink(now);
-//                 scheduleIdleLook(now);
-//             }
-//         }
-//         else
-//         {
-//             // ─────────────────────────────────
-//             // Pinch transition
-//             // ─────────────────────────────────
-//             float squeeze;
-
-//             if (transitionT < 0.5f)
-//             {
-//                 squeeze =
-//                     1.0f -
-//                     easeIn(transitionT * 2.0f);
-//             }
-//             else
-//             {
-//                 squeeze =
-//                     easeOut((transitionT - 0.5f) * 2.0f);
-//             }
-
-//             anim.eyeScaleX = squeeze;
-//             anim.eyeScaleY = squeeze;
-
-//             anim.bounce =
-//                 (1.0f - squeeze) * -3.0f;
-//         }
-//     }
-//     else
-//     {
-//         // ─────────────────────────────────────
-//         // IDLE background behavior
-//         // ─────────────────────────────────────
-//         if (currentExpr == IDLE)
-//         {
-//             // Scheduled blink
-//             if (now >= idleNextBlink)
-//             {
-//                 float blinkPhase =
-//                     fmodf(
-//                         (now - idleNextBlink) / 200.0f,
-//                         1.0f);
-
-//                 float c;
-
-//                 if (blinkPhase < 0.5f)
-//                 {
-//                     c = easeIn(blinkPhase * 2.0f);
-//                 }
-//                 else
-//                 {
-//                     c = easeOut(
-//                         (1.0f - blinkPhase) * 2.0f);
-//                 }
-
-//                 anim.eyeScaleY =
-//                     1.0f - 0.9f * c;
-
-//                 if (blinkPhase > 0.95f)
-//                 {
-//                     anim.eyeScaleY = 1.0f;
-
-//                     scheduleIdleBlink(now);
-//                 }
-//             }
-
-//             // ─────────────────────────────────
-//             // Scheduled gaze shift
-//             // ─────────────────────────────────
-//             if (now >= idleNextLook)
-//             {
-//                 idleGazeTarget =
-//                     (float)random(-3, 4) / 3.0f;
-
-//                 scheduleIdleLook(now);
-//             }
-
-//             // Smooth gaze movement
-//             idleGazeX +=
-//                 (idleGazeTarget - idleGazeX) * 0.06f;
-//         }
-
-//         // ─────────────────────────────────────
-//         // Update expression animation
-//         // ─────────────────────────────────────
-//         updateExpression(
-//             currentExpr,
-//             anim,
-//             ms);
-//     }
-
-//     u8g2.clearBuffer();
-//     u8g2.setDrawColor(1);
-//     // Draw currently selected screen
-//     renderScreen(currentScreen);
-
-//     u8g2.sendBuffer();
-// }
-
-
-
-
 void loop()
 {
 
- Global::updateWiFi();
+    Global::updateWiFi();
 
     Global::WiFiState state = Global::getWiFiState();
 
