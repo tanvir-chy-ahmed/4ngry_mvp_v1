@@ -9,6 +9,7 @@
 #include "version.h"
 #include "core/Global.h"
 #include "update/ota_update.h"
+#include <esp_ota_ops.h>
 
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, OLED_SCL, OLED_SDA);
 
@@ -117,6 +118,9 @@ inline void drawWiFiStatusUI()
 
 void setup()
 {
+    // Confirm newly booted firmware is valid to prevent bootloader rollback
+    esp_ota_mark_app_valid_cancel_rollback();
+
     Serial.begin(115200);
     BootUI::initDriver();
     BootUI::initDisplay();

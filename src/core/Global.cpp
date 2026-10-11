@@ -202,6 +202,7 @@ button {
         savedPassword = preferences.getString("password", "");
 
         preferences.end();
+        String name = "Hello";
 
         return savedSSID.length() > 0;
     }
