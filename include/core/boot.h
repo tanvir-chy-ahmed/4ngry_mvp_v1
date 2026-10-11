@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <U8g2lib.h>
-#include "core/global.h"
+#include "core/Global.h"
 #include "features/watch.h"
 #include "features/weather.h"
 #include "update/ota_update.h"

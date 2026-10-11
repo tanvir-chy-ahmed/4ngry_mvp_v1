@@ -5,7 +5,7 @@
 #include <HTTPClient.h>
 #include <string.h>
 #include <math.h>
-#include "core/global.h"
+#include "core/Global.h"
 #include <Arduino_JSON.h>
 
 extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
@@ -344,7 +344,7 @@ void weatherUI()
 // #include <WiFi.h>
 // #include <HTTPClient.h>
 // #include <string.h>
-// #include "core/global.h"
+// #include "core/Global.h"
 // #include <Arduino_JSON.h>
 
 // extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
