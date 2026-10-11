@@ -6,26 +6,26 @@
 #include "version.h"
 #include "core/Global.h"
 #include "update/ota_update.h"
+#include "update/ota_ui.h"
 #include "prefs/version_controller.h"
 
 // ============================================================
 // GitHub Configuration
 // ============================================================
 
-const char *latestReleaseUrl =
+static const char *latestReleaseUrl =
     "https://api.github.com/repos/tanvir-chy-ahmed/4ngry_mvp_v1/releases/latest";
 
-const char *firmwareBaseUrl =
+static const char *firmwareBaseUrl =
     "https://github.com/tanvir-chy-ahmed/4ngry_mvp_v1/releases/download/";
 
 // ============================================================
 // OTA Check Timer
 // ============================================================
 
-unsigned long lastUpdateCheck = 0;
-
-const unsigned long updateCheckInterval =
-    60UL * 60UL * 1000UL; // 1 hour
+static unsigned long lastPeriodicUpdateCheck = 0;
+static const unsigned long PERIODIC_CHECK_INTERVAL =
+    6UL * 60UL * 60UL * 1000UL; // 6 hours
 
 // ============================================================
 // Fetch Latest GitHub Release Version
@@ -33,81 +33,55 @@ const unsigned long updateCheckInterval =
 
 String fetchLatestVersion()
 {
-    HTTPClient http;
+    if (!Global::isWiFiConnected())
+    {
+        Serial.println("Fetch latest version skipped: WiFi not connected.");
+        return "";
+    }
 
+    HTTPClient http;
+    http.setTimeout(8000);
     http.begin(latestReleaseUrl);
 
-    // GitHub API User-Agent
-    http.addHeader(
-        "User-Agent",
-        "4ngry-ESP32");
+    // GitHub API requires a User-Agent header
+    http.addHeader("User-Agent", "4ngry-ESP32-Client");
 
     int httpCode = http.GET();
-
-    Serial.printf(
-        "GitHub API HTTP code: %d\n",
-        httpCode);
+    Serial.printf("GitHub API HTTP code: %d\n", httpCode);
 
     if (httpCode != HTTP_CODE_OK)
     {
-        Serial.printf(
-            "Failed to fetch latest release. HTTP code: %d\n",
-            httpCode);
-
+        Serial.printf("Failed to fetch release info. HTTP code: %d\n", httpCode);
         http.end();
-
         return "";
     }
 
     String payload = http.getString();
-
     http.end();
 
-    // --------------------------------------------------------
     // Parse JSON
-    // --------------------------------------------------------
-
     JsonDocument doc;
-
-    DeserializationError error =
-        deserializeJson(doc, payload);
+    DeserializationError error = deserializeJson(doc, payload);
 
     if (error)
     {
-        Serial.printf(
-            "JSON parsing failed: %s\n",
-            error.c_str());
-
+        Serial.printf("Release JSON parse failed: %s\n", error.c_str());
         return "";
     }
 
-    String tagName =
-        doc["tag_name"].as<String>();
-
-    if (tagName == "")
+    String tagName = doc["tag_name"].as<String>();
+    if (tagName.length() == 0)
     {
-        Serial.println(
-            "GitHub tag_name not found.");
-
+        Serial.println("Release tag_name was empty.");
         return "";
     }
 
-    // GitHub gives:
-    //
-    // v1.0.1
-    //
-    // We need:
-    //
-    // 1.0.1
-
-    if (tagName.startsWith("v"))
+    if (tagName.startsWith("v") || tagName.startsWith("V"))
     {
         tagName.remove(0, 1);
     }
 
-    Serial.println(
-        "Latest GitHub version: " + tagName);
-
+    Serial.println("Latest GitHub release: " + tagName);
     return tagName;
 }
 
@@ -117,7 +91,7 @@ String fetchLatestVersion()
 
 void checkfirmwareUpdate()
 {
-    if (!Global::WiFiOn())
+    if (!Global::isWiFiConnected())
     {
         Serial.println("OTA check skipped: WiFi not connected.");
         return;
@@ -128,55 +102,49 @@ void checkfirmwareUpdate()
     Serial.println("Checking Firmware Update...");
     Serial.println("==============================");
 
-    // --------------------------------------------------------
-    // Get latest version
-    // --------------------------------------------------------
+    String latestVersion = fetchLatestVersion();
 
-    String latestVersion =
-        fetchLatestVersion();
-
-    if (latestVersion == "")
+    if (latestVersion.length() == 0)
     {
-        Serial.println(
-            "Failed to fetch latest version.");
-
+        Serial.println("Failed to fetch latest version info.");
         return;
     }
 
-    // --------------------------------------------------------
-    // Current version
-    // --------------------------------------------------------
+    String currentVersion = String(FIRMWARE_VERSION);
 
-    String currentVersion =
-        String(FIRMWARE_VERSION);
-
-    Serial.println(
-        "Current Firmware Version: " +
-        currentVersion);
-
-    Serial.println(
-        "Latest Firmware Version: " +
-        latestVersion);
-
-    // --------------------------------------------------------
-    // Compare
-    // --------------------------------------------------------
+    Serial.println("Current Version: " + currentVersion);
+    Serial.println("Latest Version:  " + latestVersion);
 
     if (latestVersion != currentVersion)
     {
-        Serial.println(
-            "New firmware available!");
-
-        Serial.println(
-            "Starting OTA update...");
-
-        downloadAndApplyFirmware(
-            latestVersion);
+        Serial.println("New firmware detected! Starting OTA update...");
+        downloadAndApplyFirmware(latestVersion);
     }
     else
     {
-        Serial.println(
-            "Device is up to date.");
+        Serial.println("Firmware is already up to date.");
+    }
+}
+
+// ============================================================
+// Periodic background check helper
+// ============================================================
+
+void checkFirmwareUpdatePeriodically()
+{
+    unsigned long now = millis();
+
+    // Avoid checking immediately after booting; let system stabilize for 45s
+    if (now < 45000)
+        return;
+
+    if (!Global::isWiFiConnected())
+        return;
+
+    if (now - lastPeriodicUpdateCheck >= PERIODIC_CHECK_INTERVAL || lastPeriodicUpdateCheck == 0)
+    {
+        lastPeriodicUpdateCheck = now;
+        checkfirmwareUpdate();
     }
 }
 
@@ -184,107 +152,66 @@ void checkfirmwareUpdate()
 // Download Firmware
 // ============================================================
 
-void downloadAndApplyFirmware(
-    const String &version)
+void downloadAndApplyFirmware(const String &version)
 {
-    // --------------------------------------------------------
-    // Build firmware URL
-    // --------------------------------------------------------
-    //
-    // version = 1.0.1
-    //
-    // Result:
-    //
-    // https://github.com/tanvir-chy-ahmed/
-    // 4ngry_mvp_v1/releases/download/
-    // v1.0.1/4ngry-1.0.1.bin
-    //
-    // --------------------------------------------------------
-
     String firmwareUrl =
         String(firmwareBaseUrl) +
-        "v" +
-        version +
-        "/4ngry-" +
-        version +
-        ".bin";
+        "v" + version +
+        "/4ngry-" + version + ".bin";
 
-    Serial.println();
-    Serial.println("Firmware URL:");
-    Serial.println(firmwareUrl);
+    Serial.println("Firmware download URL: " + firmwareUrl);
+
+    otaDrawScreen(OTA_STATE_CHECKING, 0, 0, 0, version.c_str(), "Connecting to GitHub...");
 
     HTTPClient http;
-
-    // GitHub Release redirects to its
-    // actual asset server.
-    http.setFollowRedirects(
-        HTTPC_STRICT_FOLLOW_REDIRECTS);
-
-    // SAME METHOD AS YOUR WORKING CODE
+    http.setTimeout(15000);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     http.begin(firmwareUrl);
+    http.addHeader("User-Agent", "4ngry-ESP32-Client");
 
     int httpCode = http.GET();
-
-    Serial.printf(
-        "HTTP GET code: %d\n",
-        httpCode);
-
-    // --------------------------------------------------------
-    // Download successful
-    // --------------------------------------------------------
+    Serial.printf("Firmware download HTTP GET code: %d\n", httpCode);
 
     if (httpCode == HTTP_CODE_OK)
     {
-        int contentLength =
-            http.getSize();
+        int contentLength = http.getSize();
+        Serial.printf("Firmware size: %d bytes\n", contentLength);
 
-        Serial.printf(
-            "Firmware size: %d bytes\n",
-            contentLength);
-
-        if (contentLength > 0)
+        if (contentLength > 10000) // Minimum sane firmware size
         {
-            WiFiClient *stream =
-                http.getStreamPtr();
+            WiFiClient *stream = http.getStreamPtr();
 
-            if (startOTAUpdate(
-                    stream,
-                    contentLength))
+            if (startOTAUpdate(stream, contentLength, version))
             {
-                Serial.println("OTA update successful!");
-
-                // Save the version that was just installed
+                Serial.println("OTA update completed successfully!");
                 VersionController::saveVersion(version);
-
-                Serial.println(
-                    "Installed firmware version: " +
-                    VersionController::getVersion());
-
-                Serial.println("Restarting...");
+                otaDrawScreen(OTA_STATE_SUCCESS, 100, contentLength, contentLength, version.c_str());
 
                 http.end();
-
                 delay(2000);
-
                 ESP.restart();
             }
             else
             {
-                Serial.println(
-                    "OTA update failed.");
+                Serial.println("OTA update write/verify failed.");
+                otaDrawScreen(OTA_STATE_ERROR, 0, 0, 0, version.c_str(), "Flash write failed");
+                delay(3000);
             }
         }
         else
         {
-            Serial.println(
-                "Invalid firmware size.");
+            Serial.println("Invalid firmware size returned.");
+            otaDrawScreen(OTA_STATE_ERROR, 0, 0, 0, version.c_str(), "Invalid file size");
+            delay(3000);
         }
     }
     else
     {
-        Serial.printf(
-            "Failed to fetch firmware. HTTP code: %d\n",
-            httpCode);
+        Serial.printf("Failed to download firmware. HTTP code: %d\n", httpCode);
+        char errBuf[32];
+        snprintf(errBuf, sizeof(errBuf), "HTTP error %d", httpCode);
+        otaDrawScreen(OTA_STATE_ERROR, 0, 0, 0, version.c_str(), errBuf);
+        delay(3000);
     }
 
     http.end();
@@ -294,179 +221,97 @@ void downloadAndApplyFirmware(
 // OTA Flash Write
 // ============================================================
 
-bool startOTAUpdate(
-    WiFiClient *client,
-    int contentLength)
+bool startOTAUpdate(WiFiClient *client, int contentLength, const String &version)
 {
-    Serial.println(
-        "Initializing update...");
-
-    // --------------------------------------------------------
-    // Start OTA
-    // --------------------------------------------------------
+    Serial.println("Initializing OTA flash partition...");
 
     if (!Update.begin(contentLength))
     {
-        Serial.printf(
-            "Update begin failed: %s\n",
-            Update.errorString());
-
+        Serial.printf("Update.begin failed: %s\n", Update.errorString());
         return false;
     }
 
-    Serial.println(
-        "Writing firmware...");
+    Serial.println("Writing firmware to flash...");
 
     size_t written = 0;
-
     int progress = 0;
-    int lastProgress = -1;
+    int lastDrawnProgress = -1;
+    unsigned long lastUiDrawTime = 0;
 
-    // --------------------------------------------------------
-    // Timeout
-    // --------------------------------------------------------
+    const unsigned long timeoutDuration = 45000; // 45 seconds per packet timeout
+    unsigned long lastDataTime = millis();
 
-    const unsigned long timeoutDuration =
-        120UL * 1000UL;
-
-    unsigned long lastDataTime =
-        millis();
-
-    // --------------------------------------------------------
-    // Download buffer
-    // --------------------------------------------------------
-
-    uint8_t buffer[128];
-
-    // --------------------------------------------------------
-    // Download + write
-    // --------------------------------------------------------
+    // 1024-byte chunk buffer for fast transfer
+    uint8_t buffer[1024];
 
     while (written < (size_t)contentLength)
     {
-        if (client->available())
+        int avail = client->available();
+        if (avail > 0)
         {
-            size_t len =
-                client->read(
-                    buffer,
-                    sizeof(buffer));
+            size_t bytesToRead = (avail > (int)sizeof(buffer)) ? sizeof(buffer) : avail;
+            size_t len = client->read(buffer, bytesToRead);
 
             if (len > 0)
             {
-                // Important:
-                // reset timeout when data arrives
                 lastDataTime = millis();
 
-                // Write to flash
-                size_t writtenNow =
-                    Update.write(
-                        buffer,
-                        len);
-
+                size_t writtenNow = Update.write(buffer, len);
                 if (writtenNow != len)
                 {
-                    Serial.println(
-                        "Flash write failed.");
-
-                    Serial.printf(
-                        "Expected: %d, Written: %d\n",
-                        len,
-                        writtenNow);
-
+                    Serial.printf("Flash write mismatch! Expected %d, wrote %d\n", len, writtenNow);
                     Update.abort();
-
                     return false;
                 }
 
                 written += writtenNow;
+                progress = (written * 100) / contentLength;
 
-                // ------------------------------------------------
-                // Progress
-                // ------------------------------------------------
-
-                progress =
-                    (written * 100) /
-                    contentLength;
-
-                if (progress != lastProgress)
+                // Throttled UI update (every 75ms or on 2% progress leap)
+                // This keeps display responsive without slowing down the network stream
+                unsigned long now = millis();
+                if (now - lastUiDrawTime >= 75 || (progress - lastDrawnProgress >= 2))
                 {
-                    Serial.printf(
-                        "Writing Progress: %d%%\n",
-                        progress);
-
-                    lastProgress =
-                        progress;
+                    lastUiDrawTime = now;
+                    lastDrawnProgress = progress;
+                    otaDrawScreen(OTA_STATE_DOWNLOADING, progress, written, contentLength, version.c_str());
                 }
             }
         }
 
-        // --------------------------------------------------------
-        // Timeout
-        // --------------------------------------------------------
-
-        if (millis() - lastDataTime >
-            timeoutDuration)
+        // Timeout check
+        if (millis() - lastDataTime > timeoutDuration)
         {
-            Serial.println(
-                "Timeout: No data received.");
-
+            Serial.println("OTA Timeout: No data received.");
             Update.abort();
-
             return false;
         }
 
         yield();
     }
 
-    Serial.println();
-    Serial.println(
-        "Writing complete.");
+    Serial.println("Download complete. Finalizing flash...");
+    otaDrawScreen(OTA_STATE_FLASHING, 100, written, contentLength, version.c_str());
 
-    // --------------------------------------------------------
-    // Verify size
-    // --------------------------------------------------------
-
-    if (written !=
-        (size_t)contentLength)
+    if (written != (size_t)contentLength)
     {
-        Serial.printf(
-            "Write incomplete. "
-            "Expected %d but got %d bytes\n",
-            contentLength,
-            written);
-
+        Serial.printf("Write size mismatch: expected %d, got %d\n", contentLength, written);
         Update.abort();
-
         return false;
     }
-
-    // --------------------------------------------------------
-    // Finalize OTA
-    // --------------------------------------------------------
 
     if (!Update.end())
     {
-        Serial.printf(
-            "Update end failed: %s\n",
-            Update.errorString());
-
+        Serial.printf("Update.end failed: %s\n", Update.errorString());
         return false;
     }
-
-    // --------------------------------------------------------
-    // Verify final state
-    // --------------------------------------------------------
 
     if (!Update.isFinished())
     {
-        Serial.println(
-            "Update did not finish correctly.");
-
+        Serial.println("Update partition was not marked finished.");
         return false;
     }
 
-    Serial.println(
-        "Update successfully completed.");
-
+    Serial.println("Firmware flash successfully verified.");
     return true;
 }
