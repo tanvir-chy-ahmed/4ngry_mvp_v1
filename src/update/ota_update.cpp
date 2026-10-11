@@ -4,7 +4,7 @@
 #include <Update.h>
 #include <ArduinoJson.h>
 #include "version.h"
-#include "core/global.h"
+#include "core/Global.h"
 #include "update/ota_update.h"
 #include "prefs/version_controller.h"
 

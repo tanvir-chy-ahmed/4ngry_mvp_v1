@@ -1,67 +1,10 @@
-
-// #include <WiFi.h>
-// #include <Arduino.h>
-// #include <features/watch.h>
-// #include <features/weather.h>
-// #include "util/secret.h"
-// #include <HTTPClient.h>
-// namespace Global
-// {
-
-//     void WiFiOff()
-//     {
-//         // No loonger needed the wifi
-//         WiFi.disconnect(true);
-//         WiFi.mode(WIFI_OFF);
-//     }
-
-//     bool WiFiOn()
-//     {
-//         Serial.println("Starting WiFi...");
-
-//         WiFi.mode(WIFI_STA);
-//         WiFi.setAutoReconnect(true);
-//         WiFi.persistent(false);
-
-//         WiFi.begin(Secret::ssid, Secret::pass);
-
-//         Serial.println("WiFi connection started.");
-
-//         return false;
-//     }
-
-//     void updateWiFi()
-//     {
-//         static uint32_t lastCheck = 0;
-
-//         if (millis() - lastCheck < 500)
-//             return;
-
-//         lastCheck = millis();
-
-//         if (WiFi.status() == WL_CONNECTED)
-//         {
-//             static bool announced = false;
-
-//             if (!announced)
-//             {
-//                 announced = true;
-
-//                 Serial.println("WiFi Connected!");
-//                 Serial.print("IP: ");
-//                 Serial.println(WiFi.localIP());
-//             }
-//         }
-//     }
-// }
-
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Preferences.h>
-
 namespace Global
 {
+
     enum WiFiState
     {
         WIFI_NO_CREDENTIALS,
