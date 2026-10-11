@@ -2,7 +2,10 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <Update.h>
+#include <Wire.h>
 #include <ArduinoJson.h>
+#include <esp_ota_ops.h>
+#include <esp_system.h>
 #include "version.h"
 #include "core/Global.h"
 #include "update/ota_update.h"
@@ -187,9 +190,34 @@ void downloadAndApplyFirmware(const String &version)
                 VersionController::saveVersion(version);
                 otaDrawScreen(OTA_STATE_SUCCESS, 100, contentLength, contentLength, version.c_str());
 
+                // 1. Close HTTP stream
                 http.end();
+
+                // 2. Show success screen for 2 seconds
                 delay(2000);
-                ESP.restart();
+
+                // 3. Cleanly shut down Wi-Fi to stop background DMA/FreeRTOS tasks
+                Serial.println("Shutting down Wi-Fi before reboot...");
+                WiFi.disconnect(true, true);
+                WiFi.mode(WIFI_OFF);
+                delay(150);
+
+                // 4. CRITICAL FIX FOR ESP32-C3:
+                // GPIO 9 (OLED_SCL) and GPIO 8 (OLED_SDA) are hardware strapping pins!
+                // GPIO 9 MUST be HIGH at reset to boot from SPI Flash (if LOW, it enters UART Download Mode).
+                // Release the hardware I2C bus and configure pins as inputs with pull-up resistors.
+                Serial.println("Releasing I2C bus and pulling strapping pins HIGH...");
+                Wire.end();
+                pinMode(OLED_SCL, INPUT_PULLUP);
+                pinMode(OLED_SDA, INPUT_PULLUP);
+
+                // 5. Flush serial buffer
+                Serial.println("Rebooting into new firmware...");
+                Serial.flush();
+                delay(200);
+
+                // 6. Clean hardware reset
+                esp_restart();
             }
             else
             {
@@ -300,16 +328,21 @@ bool startOTAUpdate(WiFiClient *client, int contentLength, const String &version
         return false;
     }
 
-    if (!Update.end())
+    if (!Update.end(true))
     {
         Serial.printf("Update.end failed: %s\n", Update.errorString());
         return false;
     }
 
-    if (!Update.isFinished())
+    const esp_partition_t *bootPart = esp_ota_get_boot_partition();
+    if (bootPart != nullptr)
     {
-        Serial.println("Update partition was not marked finished.");
-        return false;
+        Serial.printf("Configured next boot partition: %s (address 0x%08X)\n",
+                      bootPart->label, bootPart->address);
+    }
+    else
+    {
+        Serial.println("Warning: esp_ota_get_boot_partition returned null.");
     }
 
     Serial.println("Firmware flash successfully verified.");
