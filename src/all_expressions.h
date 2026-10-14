@@ -1509,12 +1509,15 @@
 #include "update/ota_ui.h"
 #include "features/watch.h"
 #include "features/weather.h"
+#include "core/Global.h"
 
 #define FRAME_MS 33
-#define TOUCH_DEBOUNCE 250
-#define AUTO_SCREEN_INTERVAL 5000UL
+#define TOUCH_DEBOUNCE 50
+#define AUTO_SCREEN_INTERVAL 10000UL
 #define LONG_PRESS_MS 400
 #define TOUCH_RELEASE_DEBOUNCE 50
+#define WIFI_RESET_HOLD_MS 4000UL
+#define RESET_COUNTDOWN_START_MS 1200UL
 
 extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
 
@@ -1625,7 +1628,7 @@ bool touchActive = false;
 unsigned long touchStartMs = 0;
 
 unsigned long lastScreenActivityMs = 0;
-bool autoScreenEnabled = true;
+bool autoScreenEnabled = false;
 
 // Idle state
 unsigned long idleNextBlink = 0;
@@ -2887,57 +2890,173 @@ static void changeExpression()
 }
 
 // ============================================================
+// WI-FI RESET COUNTDOWN UI
+// ============================================================
+
+static void drawResetCountdownUI(unsigned long holdMs)
+{
+    u8g2.setDrawColor(1);
+
+    // Header bar
+    u8g2.drawBox(0, 0, 128, 12);
+    u8g2.setDrawColor(0);
+    u8g2.setFont(u8g2_font_6x10_tf);
+    const char *headerTitle = "RESET WI-FI SETTINGS";
+    int hw = u8g2.getStrWidth(headerTitle);
+    u8g2.drawStr((128 - hw) / 2, 9, headerTitle);
+
+    u8g2.setDrawColor(1);
+
+    // Prompt
+    u8g2.setFont(u8g2_font_5x8_tf);
+    const char *prompt = "Keep holding to reset...";
+    int pw = u8g2.getStrWidth(prompt);
+    u8g2.drawStr((128 - pw) / 2, 23, prompt);
+
+    // Progress bar
+    const int barX = 14;
+    const int barY = 28;
+    const int barW = 100;
+    const int barH = 11;
+    u8g2.drawRFrame(barX, barY, barW, barH, 2);
+
+    long duration = (long)holdMs - (long)RESET_COUNTDOWN_START_MS;
+    long totalDuration = (long)WIFI_RESET_HOLD_MS - (long)RESET_COUNTDOWN_START_MS;
+    if (duration < 0)
+        duration = 0;
+    if (duration > totalDuration)
+        duration = totalDuration;
+
+    int fillW = (int)(((barW - 4) * duration) / totalDuration);
+    if (fillW > 0)
+    {
+        u8g2.drawBox(barX + 2, barY + 2, fillW, barH - 4);
+    }
+
+    // Remaining seconds
+    long remainingMs = (long)WIFI_RESET_HOLD_MS - (long)holdMs;
+    if (remainingMs < 0)
+        remainingMs = 0;
+    int remainingSec = (int)((remainingMs + 999) / 1000);
+
+    char secBuf[32];
+    snprintf(secBuf, sizeof(secBuf), "Erasing in %ds", remainingSec);
+    int sw = u8g2.getStrWidth(secBuf);
+    u8g2.drawStr((128 - sw) / 2, 49, secBuf);
+
+    // Release hint
+    u8g2.setFont(u8g2_font_4x6_tf);
+    const char *hint = "Release now to cancel";
+    int hintW = u8g2.getStrWidth(hint);
+    u8g2.drawStr((128 - hintW) / 2, 60, hint);
+}
+
+// ============================================================
 // TOUCH HANDLER
 // ============================================================
+
+static unsigned long lastRawHighTime = 0;
+static unsigned long lastRawLowTime = 0;
+static bool debouncedPressed = false;
 
 static void handleTouch(unsigned long now)
 {
     bool raw = digitalRead(TOUCH_PIN);
 
-    if (raw && !lastTouchVal)
+    // Update raw edge timestamps
+    if (raw)
     {
-        if (now - lastTouchMs >= TOUCH_DEBOUNCE)
+        lastRawHighTime = now;
+        // Require 30ms stable HIGH to initiate press
+        if (!debouncedPressed && (now - lastRawLowTime >= 30))
         {
+            debouncedPressed = true;
             touchActive = true;
             touchStartMs = now;
+            lastTouchMs = now;
+            autoScreenEnabled = false;
+            Serial.println("Touch DOWN (debounced)");
+        }
+    }
+    else
+    {
+        lastRawLowTime = now;
+    }
+
+    // TOUCH HELD CONTINUOUSLY: Check for 4s reset
+    if (debouncedPressed && touchActive)
+    {
+        unsigned long holdDuration = now - touchStartMs;
+        if (holdDuration >= WIFI_RESET_HOLD_MS)
+        {
+            touchActive = false;
+            debouncedPressed = false;
+            lastTouchMs = now;
             autoScreenEnabled = false;
 
-            Serial.println("Touch DOWN");
+            u8g2.clearBuffer();
+            u8g2.setDrawColor(1);
+            u8g2.drawBox(0, 0, 128, 12);
+            u8g2.setDrawColor(0);
+            u8g2.setFont(u8g2_font_6x10_tf);
+            u8g2.drawStr(14, 9, "WI-FI CLEARED!");
+
+            u8g2.setDrawColor(1);
+            u8g2.setFont(u8g2_font_6x12_tf);
+            u8g2.drawStr(12, 29, "Credentials Erased!");
+
+            u8g2.setFont(u8g2_font_5x8_tf);
+            u8g2.drawStr(12, 43, "AP: 4ngryROBO");
+            u8g2.drawStr(12, 55, "IP: 192.168.4.1");
+            u8g2.sendBuffer();
+
+            Serial.println(">>> 4s touch hold reached: Erasing Wi-Fi and launching AP setup portal! <<<");
+            Global::resetWiFiCredentials();
+
+            delay(1500);
+            return;
         }
     }
 
-    if (!raw && lastTouchVal && touchActive)
+    // TOUCH RELEASE: Require stable LOW for 150ms before registering release
+    // (ignores all contact jitter/micro-glitches under 150ms)
+    if (debouncedPressed && !raw && (now - lastRawHighTime >= 150))
     {
-        unsigned long pressDuration = now - touchStartMs;
-
+        debouncedPressed = false;
         touchActive = false;
+
+        unsigned long pressDuration = (lastRawHighTime >= touchStartMs) ? (lastRawHighTime - touchStartMs) : 0;
         lastTouchMs = now;
 
-        Serial.print("Press duration: ");
+        Serial.print("Touch UP (debounced). Duration: ");
         Serial.println(pressDuration);
 
-        if (pressDuration >= LONG_PRESS_MS)
+        if (pressDuration >= RESET_COUNTDOWN_START_MS)
         {
+            Serial.println("Wi-Fi reset cancelled (released before 4s).");
+            // Do not switch expression or screen
+        }
+        else if (pressDuration >= LONG_PRESS_MS)
+        {
+            // Medium press: switch screen (Idle -> Clock -> Weather)
             nextScreen();
         }
         else if (pressDuration >= TOUCH_RELEASE_DEBOUNCE)
         {
+            // Short press: change expression
             changeExpression();
         }
 
         lastScreenActivityMs = now;
-        autoScreenEnabled = true;
     }
 
     if (autoScreenEnabled &&
-        !touchActive &&
+        !debouncedPressed &&
         now - lastScreenActivityMs >= AUTO_SCREEN_INTERVAL)
     {
         nextScreen();
         lastScreenActivityMs = now;
     }
-
-    lastTouchVal = raw;
 }
 
 // ============================================================
@@ -2946,6 +3065,13 @@ static void handleTouch(unsigned long now)
 
 static void renderScreen(Screen screen)
 {
+    // If user is currently holding the touch sensor past 1.5s, show the reset countdown!
+    if (touchActive && (millis() - touchStartMs >= RESET_COUNTDOWN_START_MS))
+    {
+        drawResetCountdownUI(millis() - touchStartMs);
+        return;
+    }
+
     switch (screen)
     {
     case SCREEN_IDLE:

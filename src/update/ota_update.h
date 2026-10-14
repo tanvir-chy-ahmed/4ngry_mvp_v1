@@ -4,14 +4,7 @@
 #include <WiFiClient.h>
 
 String fetchLatestVersion();
-
 void checkfirmwareUpdate();
-
-void downloadAndApplyFirmware(
-    const String &version
-);
-
-bool startOTAUpdate(
-    WiFiClient *client,
-    int contentLength
-);
+void checkFirmwareUpdatePeriodically();
+void downloadAndApplyFirmware(const String &version);
+bool startOTAUpdate(WiFiClient *client, int contentLength, const String &version);
