@@ -6,56 +6,58 @@
 #include <string.h>
 #include <math.h>
 #include "core/Global.h"
-#include <Arduino_JSON.h>
+#include <ArduinoJson.h>
 
 extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
 
 // ================= WEATHER CONFIGURATION =================
 
-String openwetherapikey = "554eb7387cc38ab998746cb3522e1cd3";
-String countryCode = "BD";
-String latitude = "24.857";
-String longitude = "92.014";
-String units = "metric";
-String city = "Sylhet";
-String language = "en";
+static const String openwetherapikey = "554eb7387cc38ab998746cb3522e1cd3";
+static const String countryCode = "BD";
+static const String city = "Sylhet";
+static const String units = "metric";
+static const String language = "en";
 
-String serverPath =
+static const String serverPath =
     "http://api.openweathermap.org/data/2.5/weather?q=" +
     city + "," + countryCode +
     "&APPID=" + openwetherapikey +
     "&units=" + units +
     "&lang=" + language;
 
-String jsonBuffer;
-
 // ================= WEATHER DATA =================
 
-String weatherCity = "--";
-String weatherCondition = "--";
+static String weatherCity = city;
+static String weatherCondition = "--";
 
-float weatherTemp = 0.0;
-float weatherTempMax = 0.0;
-float weatherTempMin = 0.0;
+static float weatherTemp = 0.0;
+static float weatherTempMax = 0.0;
+static float weatherTempMin = 0.0;
 
-bool weatherAvailable = false;
-
+static bool weatherAvailable = false;
 static uint8_t weatherFrame = 0;
+
+static unsigned long lastWeatherFetch = 0;
+static const unsigned long WEATHER_REFRESH_INTERVAL = 20UL * 60UL * 1000UL; // 20 minutes
+static const unsigned long WEATHER_RETRY_INTERVAL = 30UL * 1000UL;          // 30 seconds if not yet fetched
+
+bool isWeatherAvailable()
+{
+    return weatherAvailable;
+}
 
 // ================= HTTP REQUEST =================
 
 String httpGETRequest(const char *serverName)
 {
-    if (WiFi.status() != WL_CONNECTED)
+    if (!Global::isWiFiConnected())
     {
-        Serial.println("Weather: WiFi disconnected");
         return "";
     }
 
     WiFiClient client;
     HTTPClient http;
-
-    http.setTimeout(8000);
+    http.setTimeout(5000);
 
     if (!http.begin(client, serverName))
     {
@@ -64,27 +66,15 @@ String httpGETRequest(const char *serverName)
     }
 
     int httpResponseCode = http.GET();
-
-    Serial.printf("Weather HTTP code: %d\n", httpResponseCode);
-
     String payload = "";
 
     if (httpResponseCode == HTTP_CODE_OK)
     {
         payload = http.getString();
-        Serial.println("Weather API response:");
-        Serial.println(payload);
     }
     else
     {
-        if (httpResponseCode > 0)
-        {
-            Serial.println(http.getString());
-        }
-        else
-        {
-            Serial.println(http.errorToString(httpResponseCode));
-        }
+        Serial.printf("Weather HTTP code: %d\n", httpResponseCode);
     }
 
     http.end();
@@ -95,228 +85,314 @@ String httpGETRequest(const char *serverName)
 
 void getWeatherInfo()
 {
-    // Do not erase valid previous weather on failure.
-    if (WiFi.status() != WL_CONNECTED)
+    if (!Global::isWiFiConnected())
     {
-        Serial.println("Weather: WiFi disconnected");
+        Serial.println("Weather fetch skipped: WiFi offline.");
         return;
     }
 
-    jsonBuffer = httpGETRequest(serverPath.c_str());
+    String response = httpGETRequest(serverPath.c_str());
 
-    if (jsonBuffer.length() == 0)
+    if (response.length() == 0)
     {
-        Serial.println("Weather: Empty response");
+        Serial.println("Weather: Empty or failed response");
         return;
     }
 
-    JSONVar data = JSON.parse(jsonBuffer);
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, response);
 
-    if (JSON.typeof(data) == "undefined")
+    if (error)
     {
-        Serial.println("Weather: JSON parsing failed");
+        Serial.printf("Weather JSON parse failed: %s\n", error.c_str());
         return;
     }
 
-    if (JSON.typeof(data["main"]) == "undefined" ||
-        JSON.typeof(data["main"]["temp"]) == "undefined" ||
-        JSON.typeof(data["main"]["temp_max"]) == "undefined" ||
-        JSON.typeof(data["main"]["temp_min"]) == "undefined" ||
-        JSON.typeof(data["weather"]) == "undefined" ||
-        JSON.typeof(data["weather"][0]["main"]) == "undefined")
+    if (!doc["main"]["temp"].is<float>() || !doc["weather"][0]["main"].is<const char *>())
     {
-        Serial.println("Weather: Missing weather fields");
-        Serial.println(jsonBuffer);
+        Serial.println("Weather: Missing expected fields in response.");
         return;
     }
 
-    double temp = (double)data["main"]["temp"];
-    double tempMax = (double)data["main"]["temp_max"];
-    double tempMin = (double)data["main"]["temp_min"];
+    float temp = doc["main"]["temp"].as<float>();
+    float tempMax = doc["main"]["temp_max"].as<float>();
+    float tempMin = doc["main"]["temp_min"].as<float>();
 
-    if (!isfinite(temp) ||
-        !isfinite(tempMax) ||
-        !isfinite(tempMin) ||
-        temp < -100 || temp > 70 ||
-        tempMax < -100 || tempMax > 70 ||
-        tempMin < -100 || tempMin > 70 ||
-        tempMax < tempMin)
+    if (!isfinite(temp) || temp < -60.0f || temp > 65.0f)
     {
-        Serial.println("Weather: Invalid temperature values");
+        Serial.println("Weather: Unreasonable temperature reading rejected.");
         return;
     }
 
-    // Commit new values only after validation.
     weatherTemp = temp;
     weatherTempMax = tempMax;
     weatherTempMin = tempMin;
 
-    weatherCity = (const char *)data["name"];
-    weatherCondition =
-        (const char *)data["weather"][0]["main"];
+    if (doc["name"].is<const char *>())
+    {
+        weatherCity = doc["name"].as<String>();
+    }
+    weatherCondition = doc["weather"][0]["main"].as<String>();
 
     weatherAvailable = true;
 
-    Serial.println("Weather updated successfully");
-    Serial.printf("Temperature: %.1f C\n", weatherTemp);
-    Serial.printf("Maximum: %.1f C\n", weatherTempMax);
-    Serial.printf("Minimum: %.1f C\n", weatherTempMin);
-    Serial.printf("City: %s\n", weatherCity.c_str());
-    Serial.printf("Condition: %s\n", weatherCondition.c_str());
+    Serial.println("Weather updated successfully:");
+    Serial.printf("City: %s | Temp: %.1f C (H: %.1f, L: %.1f) | Condition: %s\n",
+                  weatherCity.c_str(), weatherTemp, weatherTempMax, weatherTempMin, weatherCondition.c_str());
 }
 
-// ================= RETRY FETCH =================
+// ================= PERIODIC WEATHER FETCHER =================
 
-// Blocking version: use during initial testing.
-// Each HTTP attempt can take up to 8 seconds.
+void updateWeatherPeriodically()
+{
+    if (!Global::isWiFiConnected())
+        return;
+
+    unsigned long now = millis();
+    unsigned long interval = weatherAvailable ? WEATHER_REFRESH_INTERVAL : WEATHER_RETRY_INTERVAL;
+
+    if (now - lastWeatherFetch >= interval || lastWeatherFetch == 0)
+    {
+        lastWeatherFetch = now;
+        getWeatherInfo();
+    }
+}
+
 bool fetchWeatherWithRetry()
 {
-    const uint8_t maxAttempts = 5;
-    const unsigned long retryDelay = 2000;
-
-    for (uint8_t attempt = 1; attempt <= maxAttempts; attempt++)
+    for (uint8_t attempt = 1; attempt <= 2; attempt++)
     {
-        Serial.printf(
-            "Weather attempt %u/%u\n",
-            attempt,
-            maxAttempts);
-
-        // A previous success is not proof of a new successful fetch.
-        // Use a separate freshness flag if retrying after prior success.
         getWeatherInfo();
-
-        // For startup, weatherAvailable indicates that valid data
-        // has been fetched at least once.
         if (weatherAvailable)
-        {
-            Serial.println("Weather data available");
             return true;
-        }
-
-        if (attempt < maxAttempts)
-        {
-            Serial.println("Retrying weather in 2 seconds...");
-            delay(retryDelay);
-        }
+        delay(1000);
     }
-
-    Serial.println("Weather fetch failed after 5 attempts");
     return false;
 }
 
 // ============================================================
-// WEATHER ICON
+// WEATHER ICONS
 // ============================================================
 
-static void drawWeatherIcon(int x, int y)
+static void drawSunIcon(int x, int y)
 {
-    u8g2.drawCircle(x, y, 7);
+    u8g2.drawCircle(x, y, 6);
+    u8g2.drawLine(x, y - 10, x, y - 8);
+    u8g2.drawLine(x, y + 8, x, y + 10);
+    u8g2.drawLine(x - 10, y, x - 8, y);
+    u8g2.drawLine(x + 8, y, x + 10, y);
 
-    u8g2.drawLine(x, y - 11, x, y - 9);
-    u8g2.drawLine(x, y + 9, x, y + 11);
-
-    u8g2.drawLine(x - 11, y, x - 9, y);
-    u8g2.drawLine(x + 9, y, x + 11, y);
-
-    u8g2.drawLine(x - 8, y - 8, x - 6, y - 6);
-    u8g2.drawLine(x + 6, y - 6, x + 8, y - 8);
-
-    u8g2.drawLine(x - 8, y + 8, x - 6, y + 6);
-    u8g2.drawLine(x + 6, y + 6, x + 8, y + 8);
+    u8g2.drawLine(x - 7, y - 7, x - 5, y - 5);
+    u8g2.drawLine(x + 5, y - 5, x + 7, y - 7);
+    u8g2.drawLine(x - 7, y + 7, x - 5, y + 5);
+    u8g2.drawLine(x + 5, y + 5, x + 7, y + 7);
 }
 
-// ============================================================
-// WEATHER BACKGROUND
-// ============================================================
-
-static void drawWeatherBackground()
+static void drawCloudIcon(int x, int y)
 {
-    int offset = (weatherFrame / 2) % 32;
+    u8g2.drawDisc(x - 4, y + 1, 5);
+    u8g2.drawDisc(x + 3, y - 1, 6);
+    u8g2.drawDisc(x + 9, y + 2, 4);
+    u8g2.drawBox(x - 8, y + 2, 20, 5);
+}
 
-    u8g2.drawHLine(4 + offset, 17, 12);
-    u8g2.drawHLine(92 - offset, 47, 14);
+static void drawRainIcon(int x, int y)
+{
+    drawCloudIcon(x, y - 3);
 
-    for (int i = 0; i < 6; i++)
+    // Falling raindrops
+    int animOffset = (weatherFrame / 2) % 3;
+    u8g2.drawLine(x - 5, y + 6 + animOffset, x - 7, y + 9 + animOffset);
+    u8g2.drawLine(x + 1, y + 6 + animOffset, x - 1, y + 9 + animOffset);
+    u8g2.drawLine(x + 7, y + 6 + animOffset, x + 5, y + 9 + animOffset);
+}
+
+static void drawThunderIcon(int x, int y)
+{
+    drawCloudIcon(x, y - 3);
+
+    // Lightning bolt
+    u8g2.drawLine(x + 2, y + 5, x - 1, y + 9);
+    u8g2.drawLine(x - 1, y + 9, x + 3, y + 9);
+    u8g2.drawLine(x + 3, y + 9, x, y + 14);
+}
+
+static void drawSnowIcon(int x, int y)
+{
+    drawCloudIcon(x, y - 3);
+
+    // Snowflakes
+    u8g2.drawPixel(x - 5, y + 7);
+    u8g2.drawPixel(x + 1, y + 8);
+    u8g2.drawPixel(x + 7, y + 7);
+    u8g2.drawPixel(x - 2, y + 11);
+    u8g2.drawPixel(x + 4, y + 11);
+}
+
+static void drawMistIcon(int x, int y)
+{
+    int anim = (weatherFrame / 3) % 4;
+    u8g2.drawHLine(x - 10 + anim, y - 4, 20);
+    u8g2.drawHLine(x - 8 - anim, y, 18);
+    u8g2.drawHLine(x - 11 + anim, y + 4, 22);
+}
+
+static void drawDynamicWeatherIcon(int x, int y)
+{
+    if (weatherCondition.equalsIgnoreCase("Clear"))
     {
-        int x = (i * 27 + weatherFrame / 4) % 128;
-        int y = 14 + ((i * 9) % 38);
-
-        if (x > 43 && x < 91 && y > 23 && y < 43)
-            continue;
-
-        u8g2.drawPixel(x, y);
+        drawSunIcon(x, y);
     }
-}
-
-// ============================================================
-// TEMPERATURE
-// ============================================================
-
-static void drawTemperature()
-{
-    u8g2.setFont(u8g2_font_logisoso28_tf);
-
-    char tempText[16];
-
-    if (weatherAvailable)
+    else if (weatherCondition.equalsIgnoreCase("Clouds"))
     {
-        snprintf(tempText, sizeof(tempText), "%.0f", weatherTemp);
+        drawCloudIcon(x, y);
+    }
+    else if (weatherCondition.equalsIgnoreCase("Rain") || weatherCondition.equalsIgnoreCase("Drizzle"))
+    {
+        drawRainIcon(x, y);
+    }
+    else if (weatherCondition.equalsIgnoreCase("Thunderstorm"))
+    {
+        drawThunderIcon(x, y);
+    }
+    else if (weatherCondition.equalsIgnoreCase("Snow"))
+    {
+        drawSnowIcon(x, y);
+    }
+    else if (weatherCondition.equalsIgnoreCase("Mist") || weatherCondition.equalsIgnoreCase("Fog") ||
+             weatherCondition.equalsIgnoreCase("Haze") || weatherCondition.equalsIgnoreCase("Smoke"))
+    {
+        drawMistIcon(x, y);
     }
     else
     {
-        snprintf(tempText, sizeof(tempText), "--");
-    }
-
-    u8g2.drawStr(43, 42, tempText);
-
-    if (weatherAvailable)
-    {
-        u8g2.drawCircle(81, 20, 2);
-
-        u8g2.setFont(u8g2_font_7x14B_tf);
-        u8g2.drawStr(86, 40, "C");
+        drawSunIcon(x, y);
     }
 }
 
 // ============================================================
-// WEATHER INFORMATION
+// WEATHER UNAVAILABLE UI
 // ============================================================
 
-static void drawWeatherInfo()
+static void drawWeatherUnavailableUI()
 {
     u8g2.setFont(u8g2_font_5x8_tf);
 
-    u8g2.drawStr(5, 9, city.c_str());
+    // Header
+    u8g2.drawStr(5, 10, ("WEATHER - " + city).c_str());
 
-    if (weatherAvailable)
+    // Mini WiFi status
+    if (Global::isWiFiConnected())
     {
-        u8g2.drawStr(91, 9, weatherCondition.c_str());
-
-        char maxText[15];
-        snprintf(maxText, sizeof(maxText), "H:%.0f", weatherTempMax);
-        u8g2.drawStr(5, 61, maxText);
-
-        char minText[15];
-        snprintf(minText, sizeof(minText), "L:%.0f", weatherTempMin);
-        u8g2.drawStr(102, 61, minText);
+        u8g2.drawVLine(118, 8, 2);
+        u8g2.drawVLine(121, 6, 4);
+        u8g2.drawVLine(124, 4, 6);
     }
     else
     {
-        u8g2.drawStr(91, 9, "Loading");
-        u8g2.drawStr(5, 61, "H:--");
-        u8g2.drawStr(102, 61, "L:--");
+        u8g2.drawDisc(120, 8, 1);
+        u8g2.drawLine(118, 4, 124, 10);
     }
+
+    u8g2.drawHLine(4, 14, 120);
+
+    // Center cloud with question mark
+    drawCloudIcon(24, 34);
+    u8g2.setFont(u8g2_font_6x10_tf);
+    u8g2.drawStr(22, 34, "?");
+
+    // Status box
+    u8g2.setFont(u8g2_font_6x12_tf);
+    u8g2.drawStr(48, 30, "NO WEATHER");
+
+    u8g2.setFont(u8g2_font_5x8_tf);
+    if (Global::isWiFiConnected())
+    {
+        u8g2.drawStr(48, 42, "Fetching data...");
+        u8g2.drawStr(48, 52, "Contacting API...");
+    }
+    else
+    {
+        u8g2.drawStr(48, 42, "WiFi Offline");
+        uint32_t retrySec = Global::getSecondsUntilRetry();
+        if (retrySec > 0)
+        {
+            char rBuf[20];
+            snprintf(rBuf, sizeof(rBuf), "Retry: %us", retrySec);
+            u8g2.drawStr(48, 52, rBuf);
+        }
+        else
+        {
+            u8g2.drawStr(48, 52, "Waiting WiFi");
+        }
+    }
+
+    u8g2.drawHLine(4, 57, 120);
+    u8g2.setFont(u8g2_font_4x6_tf);
+    u8g2.drawStr(26, 63, "Auto-updates when online");
 }
 
 // ============================================================
-// WEATHER ACCENTS
+// WEATHER AVAILABLE UI
 // ============================================================
 
-static void drawWeatherAccents()
+static void drawWeatherAvailableUI()
 {
-    u8g2.drawVLine(3, 23, 19);
-    u8g2.drawVLine(124, 23, 19);
-    u8g2.drawDisc(64, 52, 1);
+    // Background drift particles
+    int offset = (weatherFrame / 2) % 32;
+    u8g2.drawHLine(4 + offset, 17, 12);
+    u8g2.drawHLine(92 - offset, 47, 14);
+
+    // Header: City and Condition
+    u8g2.setFont(u8g2_font_5x8_tf);
+    u8g2.drawStr(5, 10, weatherCity.c_str());
+
+    int condW = u8g2.getStrWidth(weatherCondition.c_str());
+    u8g2.drawStr(114 - condW, 10, weatherCondition.c_str());
+
+    // Mini WiFi icon
+    if (Global::isWiFiConnected())
+    {
+        u8g2.drawVLine(118, 8, 2);
+        u8g2.drawVLine(121, 6, 4);
+        u8g2.drawVLine(124, 4, 6);
+    }
+
+    u8g2.drawHLine(4, 14, 120);
+
+    // Weather Icon on left
+    drawDynamicWeatherIcon(22, 33);
+
+    // Temperature in center
+    u8g2.setFont(u8g2_font_logisoso28_tf);
+    char tempText[12];
+    snprintf(tempText, sizeof(tempText), "%.0f", weatherTemp);
+    u8g2.drawStr(48, 43, tempText);
+
+    // Degree symbol & Celsius unit
+    int textW = u8g2.getStrWidth(tempText);
+    int degX = 50 + textW;
+    u8g2.drawCircle(degX + 3, 21, 2);
+    u8g2.setFont(u8g2_font_7x14B_tf);
+    u8g2.drawStr(degX + 8, 38, "C");
+
+    // Separator line above footer
+    u8g2.drawHLine(4, 50, 120);
+
+    // Footer: High & Low
+    u8g2.setFont(u8g2_font_5x8_tf);
+    char maxText[16];
+    snprintf(maxText, sizeof(maxText), "H:%.0f C", weatherTempMax);
+    u8g2.drawStr(5, 60, maxText);
+
+    char minText[16];
+    snprintf(minText, sizeof(minText), "L:%.0f C", weatherTempMin);
+    int minW = u8g2.getStrWidth(minText);
+    u8g2.drawStr(123 - minW, 60, minText);
+
+    // Center pulse dot
+    uint8_t pulse = (weatherFrame / 4) % 3;
+    u8g2.drawDisc(64, 57, pulse == 1 ? 2 : 1);
 }
 
 // ============================================================
@@ -327,398 +403,15 @@ void weatherUI()
 {
     u8g2.clearBuffer();
 
-    drawWeatherBackground();
-    drawWeatherInfo();
-    drawWeatherIcon(22, 31);
-    drawTemperature();
-    drawWeatherAccents();
+    if (!isWeatherAvailable())
+    {
+        drawWeatherUnavailableUI();
+    }
+    else
+    {
+        drawWeatherAvailableUI();
+    }
 
     u8g2.sendBuffer();
-
     weatherFrame++;
 }
-
-// #include <Arduino.h>
-// #include "features/watch.h"
-// #include <U8g2lib.h>
-// #include <WiFi.h>
-// #include <HTTPClient.h>
-// #include <string.h>
-// #include "core/Global.h"
-// #include <Arduino_JSON.h>
-
-// extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
-
-// // https://api.openweathermap.org/data/2.5/weather?id=1185099&appid=554eb7387cc38ab998746cb3522e1cd3&units=metric
-
-// String openwetherapikey = "554eb7387cc38ab998746cb3522e1cd3";
-// String countryCode = "BD";
-// String latitude = "24.857";
-// String longitude = "92.014";
-// String units = "metric";
-// String city = "Sylhet";
-// String language = "en";
-// String serverPath = "http://api.openweathermap.org/data/2.5/weather?q=" + city + "," + countryCode + "&APPID=" + openwetherapikey + "&units=metric";
-// // String url = "https://api.openweathermap.org/data/2.5/weather?id=1185099&appid=554eb7387cc38ab998746cb3522e1cd3&units=metric";
-// String jsonBuffer;
-
-// // ================= WEATHER DATA =================
-// String weatherCity = "--";
-// String weatherCondition = "--";
-
-// float weatherTemp = 0.0;
-// float weatherTempMax = 0.0;
-// float weatherTempMin = 0.0;
-
-// bool weatherAvailable = false;
-
-// // String httpGETRequest(const char *serverName)
-// // {
-// //     WiFiClient client;
-// //     HTTPClient http;
-
-// //     // Your Domain name with URL path or IP address with path
-// //     http.begin(client, serverName);
-
-// //     // Send HTTP POST request
-// //     int httpResponseCode = http.GET();
-
-// //     String payload = "{}";
-
-// //     if (httpResponseCode > 0)
-// //     {
-// //         Serial.print("HTTP Response code: ");
-// //         Serial.println(httpResponseCode);
-// //         payload = http.getString();
-// //     }
-// //     else
-// //     {
-// //         Serial.print("Error code: ");
-// //         Serial.println(httpResponseCode);
-// //     }
-// //     // Free resources
-// //     http.end();
-
-// //     return payload;
-// // }
-// // void getWeatherInfo()
-// // {
-
-// //         if (WiFi.status() == WL_CONNECTED)
-// //         {
-// //             jsonBuffer = httpGETRequest(serverPath.c_str());
-
-// //             JSONVar myObject = JSON.parse(jsonBuffer);
-
-// //             if (JSON.typeof(myObject) == "undefined")
-// //             {
-// //                 Serial.println("Parsing input failed!");
-// //                 return;
-// //             }
-
-// //             // Store weather data
-// //             weatherTemp =
-// //                 (double)myObject["main"]["temp"];
-
-// //             weatherTempMax =
-// //                 (double)myObject["main"]["temp_max"];
-
-// //             weatherTempMin =
-// //                 (double)myObject["main"]["temp_min"];
-
-// //             weatherCity =
-// //                 (const char *)myObject["name"];
-
-// //             weatherCondition =
-// //                 (const char *)myObject["weather"][0]["main"];
-
-// //             weatherAvailable = true;
-
-// //             Serial.println("Weather updated");
-
-// //             Serial.print("Temperature: ");
-// //             Serial.println(myObject["main"]["temp"]);
-
-// //             Serial.print("High Temperature: ");
-// //             Serial.println(myObject["main"]["temp_max"]);
-
-// //             Serial.print("Low Temperature: ");
-// //             Serial.println(myObject["main"]["temp_min"]);
-
-// //             Serial.print("City: ");
-// //             Serial.println(myObject["name"]);
-
-// //             Serial.print("Condition: ");
-// //             Serial.println(myObject["weather"][0]["main"]);
-// //         }
-// //         else
-// //         {
-// //             Serial.println("WiFi Disconnected");
-// //         }
-
-// // }
-
-// String httpGETRequest(const char *serverName)
-// {
-//     if (WiFi.status() != WL_CONNECTED)
-//     {
-//         Serial.println("Weather: WiFi disconnected");
-//         return "";
-//     }
-
-//     WiFiClient client;
-//     HTTPClient http;
-
-//     http.setTimeout(8000);
-
-//     if (!http.begin(client, serverName))
-//     {
-//         Serial.println("Weather: HTTP begin failed");
-//         return "";
-//     }
-
-//     int httpResponseCode = http.GET();
-
-//     Serial.printf("Weather HTTP code: %d\n", httpResponseCode);
-
-//     String payload = "";
-
-//     if (httpResponseCode == HTTP_CODE_OK)
-//     {
-//         payload = http.getString();
-//         Serial.println("Weather API response:");
-//         Serial.println(payload);
-//     }
-//     else
-//     {
-//         // Read the error response for diagnosis.
-//         if (httpResponseCode > 0)
-//         {
-//             Serial.println(http.getString());
-//         }
-//         else
-//         {
-//             Serial.println(http.errorToString(httpResponseCode));
-//         }
-//     }
-
-//     http.end();
-//     return payload;
-// }
-
-// void getWeatherInfo()
-// {
-//     if (WiFi.status() != WL_CONNECTED)
-//     {
-//         Serial.println("Weather: WiFi disconnected");
-//         return;
-//     }
-
-//     String response = httpGETRequest(serverPath.c_str());
-
-//     if (response.length() == 0)
-//     {
-//         Serial.println("Weather: Empty response");
-//         return;
-//     }
-
-//     JSONVar data = JSON.parse(response);
-
-//     if (JSON.typeof(data) == "undefined")
-//     {
-//         Serial.println("Weather: JSON parsing failed");
-//         return;
-//     }
-
-//     // Check for valid weather data before accessing its fields.
-//     if (JSON.typeof(data["main"]) == "undefined" ||
-//         JSON.typeof(data["main"]["temp"]) == "undefined" ||
-//         JSON.typeof(data["main"]["temp_max"]) == "undefined" ||
-//         JSON.typeof(data["main"]["temp_min"]) == "undefined" ||
-//         JSON.typeof(data["weather"]) == "undefined")
-//     {
-//         Serial.println("Weather: API response has no valid weather data");
-//         Serial.println(response);
-//         return;
-//     }
-
-//     double temp = (double)data["main"]["temp"];
-//     double tempMax = (double)data["main"]["temp_max"];
-//     double tempMin = (double)data["main"]["temp_min"];
-
-//     // Reject impossible/unusable readings without overwriting old data.
-//     if (!isfinite(temp) || !isfinite(tempMax) || !isfinite(tempMin) ||
-//         temp < -100 || temp > 70 ||
-//         tempMax < -100 || tempMax > 70 ||
-//         tempMin < -100 || tempMin > 70 ||
-//         tempMax < tempMin ||
-//         JSON.typeof(data["weather"][0]["main"]) == "undefined")
-//     {
-//         Serial.println("Weather: Invalid temperature or condition");
-//         return;
-//     }
-
-//     // Update existing global variables only after validation.
-//     weatherTemp = temp;
-//     weatherTempMax = tempMax;
-//     weatherTempMin = tempMin;
-//     weatherCity = (const char *)data["name"];
-//     weatherCondition = (const char *)data["weather"][0]["main"];
-
-//     weatherAvailable = true;
-
-//     Serial.println("Weather updated successfully");
-//     Serial.printf("Temperature: %.1f C\n", weatherTemp);
-//     Serial.printf("Maximum: %.1f C\n", weatherTempMax);
-//     Serial.printf("Minimum: %.1f C\n", weatherTempMin);
-//     Serial.printf("City: %s\n", weatherCity.c_str());
-//     Serial.printf("Condition: %s\n", weatherCondition.c_str());
-// }
-// static uint8_t weatherFrame = 0;
-
-// // ============================================================
-// // WEATHER ICON
-// // ============================================================
-
-// static void drawWeatherIcon(int x, int y)
-// {
-//     // Sun body
-//     u8g2.drawCircle(x, y, 7);
-
-//     // Sun rays - 8 evenly spaced rays
-//     u8g2.drawLine(x, y - 11, x, y - 9); // top
-//     u8g2.drawLine(x, y + 9, x, y + 11); // bottom
-
-//     u8g2.drawLine(x - 11, y, x - 9, y); // left
-//     u8g2.drawLine(x + 9, y, x + 11, y); // right
-
-//     u8g2.drawLine(x - 8, y - 8, x - 6, y - 6); // top-left
-//     u8g2.drawLine(x + 6, y - 6, x + 8, y - 8); // top-right
-
-//     u8g2.drawLine(x - 8, y + 8, x - 6, y + 6); // bottom-left
-//     u8g2.drawLine(x + 6, y + 6, x + 8, y + 8); // bottom-right
-// }
-// // ============================================================
-// // WEATHER BACKGROUND
-// // ============================================================
-
-// static void drawWeatherBackground()
-// {
-//     // Slow horizontal atmospheric lines
-//     int offset = (weatherFrame / 2) % 32;
-
-//     u8g2.drawHLine(4 + offset, 17, 12);
-//     u8g2.drawHLine(92 - offset, 47, 14);
-
-//     // Tiny drifting particles
-//     for (int i = 0; i < 6; i++)
-//     {
-//         int x = (i * 27 + weatherFrame / 4) % 128;
-//         int y = 14 + ((i * 9) % 38);
-
-//         // Don't disturb main temperature
-//         if (x > 43 && x < 91 && y > 23 && y < 43)
-//             continue;
-
-//         u8g2.drawPixel(x, y);
-//     }
-// }
-
-// // ============================================================
-// // TEMPERATURE
-// // ============================================================
-
-// static void drawTemperature()
-// {
-//     // Main temperature
-//     u8g2.setFont(u8g2_font_logisoso28_tf);
-//     char tempText[16];
-
-//     snprintf(
-//         tempText,
-//         sizeof(tempText),
-//         "%.0f",
-//         weatherTemp);
-//     u8g2.drawStr(43, 42, tempText);
-
-//     // Degree symbol
-//     u8g2.drawCircle(81, 20, 2);
-
-//     // Celsius
-//     u8g2.setFont(u8g2_font_7x14B_tf);
-//     u8g2.drawStr(86, 40, "C");
-// }
-
-// // ============================================================
-// // WEATHER INFORMATION
-// // ============================================================
-
-// static void drawWeatherInfo()
-// {
-//     u8g2.setFont(u8g2_font_5x8_tf);
-
-//     // Location
-//     u8g2.drawStr(5, 9, city.c_str());
-
-//     // Condition
-//     u8g2.drawStr(91, 9, weatherCondition.c_str());
-//     char maxText[15];
-
-//     snprintf(
-//         maxText,
-//         sizeof(maxText),
-//         "L:%.0f",
-//         weatherTempMax);
-//     // Bottom information
-//     u8g2.drawStr(5, 61, maxText);
-
-//     char minText[15];
-
-//     snprintf(
-//         minText,
-//         sizeof(minText),
-//         "L:%.0f",
-//         weatherTempMin);
-
-//     u8g2.drawStr(102, 61, minText);
-// }
-
-// // ============================================================
-// // WEATHER ACCENTS
-// // ============================================================
-
-// static void drawWeatherAccents()
-// {
-//     // Small left vertical marker
-//     u8g2.drawVLine(3, 23, 19);
-
-//     // Small right vertical marker
-//     u8g2.drawVLine(124, 23, 19);
-
-//     // Bottom center indicator
-//     u8g2.drawDisc(64, 52, 1);
-// }
-
-// // ============================================================
-// // MAIN WEATHER UI
-// // ============================================================
-
-// void weatherUI()
-// {
-//     u8g2.clearBuffer();
-
-//     drawWeatherBackground();
-
-//     drawWeatherInfo();
-
-//     // Weather icon slightly behind / beside temperature
-//     drawWeatherIcon(22, 31);
-
-//     drawTemperature();
-
-//     drawWeatherAccents();
-
-//     u8g2.sendBuffer();
-
-//     weatherFrame++;
-// }

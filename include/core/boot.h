@@ -165,25 +165,15 @@ namespace BootUI
 
     void initWeather()
     {
-        Serial.println("Waiting for WiFi before fetching weather...");
-
-        const unsigned long startTime = millis();
-        const unsigned long wifiTimeout = 15000;
-
-        while (WiFi.status() != WL_CONNECTED &&
-               millis() - startTime < wifiTimeout)
+        Serial.println("Initializing weather subsystem...");
+        if (WiFi.status() == WL_CONNECTED)
         {
-            Global::updateWiFi();
-            delay(100);
+            getWeatherInfo();
         }
-
-        if (WiFi.status() != WL_CONNECTED)
+        else
         {
-            Serial.println("Weather skipped: WiFi connection timeout");
-            return;
+            Serial.println("Weather will be fetched in background once WiFi connects.");
         }
-
-        fetchWeatherWithRetry();
     }
 
     void initTime()

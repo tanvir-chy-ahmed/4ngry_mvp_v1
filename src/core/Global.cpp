@@ -2,26 +2,18 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Preferences.h>
+#include "core/Global.h"
+
 namespace Global
 {
-
-    enum WiFiState
-    {
-        WIFI_NO_CREDENTIALS,
-        WIFI_CONNECTING,
-        WIFI_CONNECTED,
-        WIFI_UNAVAILABLE,
-        WIFI_SETUP_PORTAL
-    };
-
     // Persistent storage and web portal
     static Preferences preferences;
     static WebServer server(80);
 
     static WiFiState wifiState = WIFI_NO_CREDENTIALS;
 
-    static String savedSSID;
-    static String savedPassword;
+    static String savedSSID = "";
+    static String savedPassword = "";
 
     static bool portalStarted = false;
     static bool wifiStarted = false;
@@ -35,7 +27,17 @@ namespace Global
     static uint8_t failedAttempts = 0;
 
     static constexpr uint32_t CONNECT_TIMEOUT_MS = 15000;
-    static constexpr uint32_t RETRY_INTERVAL_MS = 10000;
+
+    static uint32_t getRetryIntervalMs()
+    {
+        if (failedAttempts <= 1)
+            return 10000; // 10s
+        if (failedAttempts == 2)
+            return 20000; // 20s
+        if (failedAttempts == 3)
+            return 30000; // 30s
+        return 60000;     // 60s max backoff
+    }
 
     // --------------------------------------------------------
     // Web page
@@ -63,9 +65,10 @@ main {
     padding: 24px;
     background: #1c222b;
     border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
 }
-h2 { margin-top: 0; }
-p { color: #b8c0cc; line-height: 1.5; }
+h2 { margin-top: 0; color: #f0b429; }
+p { color: #b8c0cc; line-height: 1.5; font-size: 14px; }
 input, button {
     box-sizing: border-box;
     width: 100%;
@@ -84,19 +87,20 @@ button {
     background: #f0b429;
     color: #161616;
     font-weight: bold;
+    cursor: pointer;
 }
 </style>
 </head>
 <body>
 <main>
 <h2>4ngryROBO Setup</h2>
-<p>Enter your home Wi-Fi credentials. 4ngryROBO will save them and connect automatically next time.</p>
+<p>Enter your 2.4GHz Wi-Fi credentials to connect 4ngryROBO. Settings are securely stored.</p>
 <form action="/save" method="POST">
-<label>Wi-Fi network name</label>
-<input name="ssid" maxlength="32" required placeholder="Your Wi-Fi SSID">
-<label>Wi-Fi password</label>
-<input name="password" type="password" maxlength="64" placeholder="Your Wi-Fi password">
-<button type="submit">Save and Connect</button>
+<label style="font-size:13px;color:#a0aec0">Wi-Fi network name (SSID)</label>
+<input name="ssid" maxlength="32" required placeholder="e.g. MyHomeWiFi">
+<label style="font-size:13px;color:#a0aec0">Wi-Fi password</label>
+<input name="password" type="password" maxlength="64" placeholder="Password">
+<button type="submit">Save &amp; Connect</button>
 </form>
 </main>
 </body>
@@ -166,14 +170,14 @@ button {
             server.send(
                 200,
                 "text/html",
-                "<html><body style='font-family:Arial;padding:24px'>"
-                "<h2>Credentials saved</h2>"
-                "<p>4ngryROBO is now connecting to your Wi-Fi. "
-                "You can disconnect from the 4ngryROBO network.</p>"
+                "<html><body style='font-family:Arial;padding:24px;background:#101318;color:#fff'>"
+                "<h2 style='color:#f0b429'>Credentials Saved!</h2>"
+                "<p>4ngryROBO is now connecting to <b>" + ssid + "</b>.</p>"
+                "<p>You can disconnect from this network.</p>"
                 "</body></html>"
             );
 
-            Serial.println("Wi-Fi credentials saved."); });
+            Serial.println("Wi-Fi credentials saved: " + ssid); });
 
         server.onNotFound([]()
                           {
@@ -198,6 +202,7 @@ button {
         savedPassword = preferences.getString("password", "");
 
         preferences.end();
+        String name = "Hello";
 
         return savedSSID.length() > 0;
     }
@@ -247,19 +252,45 @@ button {
         }
 
         beginConnection();
-
-        // true means initialization started, not that Wi-Fi is connected.
         return true;
     }
 
     // --------------------------------------------------------
-    // Optional: call from a button/long-press handler
-    // to reopen setup mode if the user changes routers.
+    // Request opening setup portal
     // --------------------------------------------------------
 
     void requestSetupPortal()
     {
         portalRequested = true;
+    }
+
+    void triggerImmediateReconnect()
+    {
+        if (savedSSID.length() > 0)
+        {
+            WiFi.disconnect(false, false);
+            beginConnection();
+        }
+    }
+
+    void resetWiFiCredentials()
+    {
+        Serial.println("Resetting Wi-Fi credentials from Preferences...");
+
+        if (preferences.begin("4ngryROBO", false))
+        {
+            preferences.remove("ssid");
+            preferences.remove("password");
+            preferences.end();
+        }
+
+        savedSSID = "";
+        savedPassword = "";
+        failedAttempts = 0;
+        wifiStarted = false;
+
+        WiFi.disconnect(true, true);
+        startSetupPortal();
     }
 
     // --------------------------------------------------------
@@ -306,9 +337,11 @@ button {
         {
             if (wifiState != WIFI_CONNECTED)
             {
-                Serial.println("Wi-Fi connected.");
+                Serial.println("Wi-Fi connected successfully!");
                 Serial.print("IP address: ");
                 Serial.println(WiFi.localIP());
+                Serial.print("RSSI: ");
+                Serial.println(WiFi.RSSI());
             }
 
             wifiState = WIFI_CONNECTED;
@@ -319,20 +352,24 @@ button {
         if (!wifiStarted)
             return;
 
+        // If we were connecting and timed out
         if (wifiState == WIFI_CONNECTING &&
             now - connectStartedAt >= CONNECT_TIMEOUT_MS)
         {
             wifiState = WIFI_UNAVAILABLE;
             failedAttempts++;
 
-            Serial.println("Wi-Fi unavailable. Will retry.");
+            uint32_t nextInterval = getRetryIntervalMs();
+            Serial.printf("Wi-Fi unavailable (attempt %d). Will retry in %ds.\n",
+                          failedAttempts, (int)(nextInterval / 1000));
             lastRetryAt = now;
         }
 
+        // If unavailable, retry with tiered backoff
         if (wifiState == WIFI_UNAVAILABLE &&
-            now - lastRetryAt >= RETRY_INTERVAL_MS)
+            now - lastRetryAt >= getRetryIntervalMs())
         {
-            Serial.println("Retrying saved Wi-Fi...");
+            Serial.println("Retrying Wi-Fi connection...");
 
             WiFi.disconnect(false, false);
             WiFi.begin(savedSSID.c_str(), savedPassword.c_str());
@@ -344,7 +381,7 @@ button {
     }
 
     // --------------------------------------------------------
-    // Read the current state from your OLED/UI code
+    // Helpers
     // --------------------------------------------------------
 
     WiFiState getWiFiState()
@@ -357,9 +394,30 @@ button {
         return WiFi.status() == WL_CONNECTED;
     }
 
-    // --------------------------------------------------------
-    // Existing function
-    // --------------------------------------------------------
+    int getWiFiRSSI()
+    {
+        if (WiFi.status() == WL_CONNECTED)
+            return WiFi.RSSI();
+        return -100;
+    }
+
+    String getSavedSSID()
+    {
+        return savedSSID;
+    }
+
+    uint32_t getSecondsUntilRetry()
+    {
+        if (wifiState != WIFI_UNAVAILABLE)
+            return 0;
+
+        uint32_t elapsed = millis() - lastRetryAt;
+        uint32_t interval = getRetryIntervalMs();
+        if (elapsed >= interval)
+            return 0;
+
+        return (interval - elapsed + 999) / 1000;
+    }
 
     void WiFiOff()
     {
