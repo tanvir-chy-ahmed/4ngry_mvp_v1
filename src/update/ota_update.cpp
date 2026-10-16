@@ -21,6 +21,7 @@ static const char *latestReleaseUrl =
 
 static const char *firmwareBaseUrl =
     "https://github.com/tanvir-chy-ahmed/4ngry_mvp_v1/releases/download/";
+    
 
 // ============================================================
 // OTA Check Timer

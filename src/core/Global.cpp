@@ -430,3 +430,23 @@ button {
         wifiState = WIFI_NO_CREDENTIALS;
     }
 }
+
+
+
+/*
+
+
+
+      - name: Prepare release
+        run: |
+          mkdir -p release
+
+          cp .pio/build/*/firmware.bin \
+             "release/4ngry-${{ steps.version.outputs.version }}.bin"
+
+          echo "Created:"
+          ls -lh release/
+          
+          
+          
+          */

@@ -139,6 +139,7 @@ void setup()
     BootUI::initWiFi();
     BootUI::initTime();
     BootUI::initWeather();
+    // checkfirmwareUpdate();
 }
 
 void loop()

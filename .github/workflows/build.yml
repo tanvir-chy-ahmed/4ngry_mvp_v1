@@ -41,15 +41,18 @@ jobs:
       - name: Build firmware
         run: pio run
 
+
+
       - name: Prepare release
+        shell: bash
         run: |
           mkdir -p release
 
-          cp .pio/build/*/firmware.bin \
+          cp .pio/build/esp32-c3-zero/firmware.bin \
              "release/4ngry-${{ steps.version.outputs.version }}.bin"
 
-          echo "Created:"
           ls -lh release/
+
 
       - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v2
