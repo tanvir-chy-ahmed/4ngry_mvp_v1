@@ -1,0 +1,71 @@
+name: 4ngry Firmware Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Read firmware version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(grep -oP '#define\s+FIRMWARE_VERSION\s+"\K[^"]+' include/version.h)
+
+          if [ -z "$VERSION" ]; then
+            echo "FIRMWARE_VERSION not found!"
+            exit 1
+          fi
+
+          echo "Firmware version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build firmware
+        run: pio run
+
+
+
+      - name: Prepare release
+        shell: bash
+        run: |
+          mkdir -p release
+
+          cp .pio/build/esp32-c3-zero/firmware.bin \
+             "release/4ngry-${{ steps.version.outputs.version }}.bin"
+
+          ls -lh release/
+
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: 4ngry v${{ steps.version.outputs.version }}
+          body: |
+            4ngry Firmware v${{ steps.version.outputs.version }}
+
+            Automatic firmware build from commit:
+            ${{ github.sha }}
+          files: release/4ngry-${{ steps.version.outputs.version }}.bin
+          make_latest: true
+          overwrite_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
