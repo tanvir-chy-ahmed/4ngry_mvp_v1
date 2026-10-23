@@ -1,0 +1,8 @@
+{
+  "clangd.path": "D:\\Espressif\\tools\\esp-clangd\\esp-21.1.3_20260408\\esp-clangd\\bin\\clangd.exe",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=**",
+    "--compile-commands-dir=d:\\Desktop\\4ngry mvp\\4ngry desk robo mvp\\build"
+  ]
+}
