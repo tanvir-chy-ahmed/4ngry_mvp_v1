@@ -4,5 +4,6 @@
     "--background-index",
     "--query-driver=**",
     "--compile-commands-dir=d:\\Desktop\\4ngry mvp\\4ngry desk robo mvp\\build"
-  ]
+  ],
+  "idf.currentSetup": "D:\\esp\\v6.1\\esp-idf"
 }

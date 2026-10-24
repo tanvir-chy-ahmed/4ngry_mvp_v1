@@ -188,7 +188,6 @@ namespace ExtraScreens
             d.setFont(u8g2_font_logisoso24_tf);
             d.drawStr(25, 40, t);
             d.setFont(u8g2_font_5x8_tf);
-            d.drawStr(14, 54, "Countdown running");
             d.drawStr(25, 63, "Single Tap to cancel");
         }
         else
