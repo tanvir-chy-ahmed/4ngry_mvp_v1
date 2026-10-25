@@ -15,7 +15,7 @@
 #define AUTO_SCREEN_INTERVAL 5000UL
 #define LONG_PRESS_MS 400
 #define TOUCH_RELEASE_DEBOUNCE 50
-#define TESTING_BRANCH 22
+
 extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
 
 // ============================================================
